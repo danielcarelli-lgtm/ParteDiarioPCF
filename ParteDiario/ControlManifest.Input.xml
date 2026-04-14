@@ -1,0 +1,31 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<manifest>
+  <control namespace="sec" constructor="ParteDiario" version="1.0.9" display-name-key="ParteDiario" description-key="Visualizador de horas imputadas del parte diario" control-type="standard" >
+    
+    <type-group name="AnyType">
+      <type>SingleLine.Text</type>
+      <type>MultipleLine.Text</type>
+      <type>DateAndTime.DateOnly</type>
+      <type>DateAndTime.DateAndTime</type>
+      <type>Lookup.Simple</type>
+      <type>Whole.None</type>
+    </type-group>
+
+    <property name="boundField" display-name-key="Campo Base" description-key="Campo base donde se aloja el control" of-type-group="AnyType" usage="bound" required="true" />
+    
+    <property name="sec_fecha" display-name-key="Fecha del Parte" description-key="Fecha a filtrar en las entradas de tiempo" of-type="DateAndTime.DateOnly" usage="input" required="false" />
+    <property name="sec_horainicio" display-name-key="Hora Inicio Jornada" description-key="Hora de inicio" of-type="DateAndTime.DateAndTime" usage="input" required="false" />
+    <property name="sec_horafin" display-name-key="Hora Fin Jornada" description-key="Hora de fin" of-type="DateAndTime.DateAndTime" usage="input" required="false" />
+    <property name="sec_recursoid" display-name-key="Recurso" description-key="Recurso que se puede reservar" of-type="Lookup.Simple" usage="input" required="false" />
+
+    <resources>
+      <code path="index.ts" order="1"/>
+      <css path="css/ParteDiario.css" order="1" />
+    </resources>
+    
+    <feature-usage>
+      <uses-feature name="WebAPI" required="true" />
+    </feature-usage>
+    
+  </control>
+</manifest>

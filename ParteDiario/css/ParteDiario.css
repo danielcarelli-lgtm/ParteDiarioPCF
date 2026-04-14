@@ -1,0 +1,84 @@
+.pd-timeline-wrapper {
+    position: relative;
+    width: 100%;
+    padding: 20px 0 25px 0; /* Añadido un poco de espacio extra abajo para la etiqueta */
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.pd-version-tag {
+    position: absolute;
+    bottom: 0;         /* Cambiado a bottom */
+    right: 5px;
+    font-size: 10px;
+    color: #999;       /* Gris más claro/discreto */
+    background: transparent; /* Fondo transparente para que quede limpio */
+    padding: 2px 5px;
+    z-index: 10;
+}
+
+.pd-error {
+    color: #d83b01;
+    font-size: 12px;
+    margin-top: 10px;
+}
+
+/* Contenedor principal de 24 horas */
+.pd-timeline {
+    position: relative;
+    width: 100%;
+    height: 40px;
+    background-color: #e2e2e2;
+    border-radius: 6px;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+    overflow: hidden;
+}
+
+/* Marcador de la jornada laboral base */
+.pd-jornada {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background-color: #cce5ff;
+    border-left: 2px dashed #0056b3;
+    border-right: 2px dashed #0056b3;
+    box-sizing: border-box;
+    z-index: 1;
+}
+
+/* Entradas de tiempo generales */
+.pd-entry {
+    position: absolute;
+    top: 10%;
+    height: 80%;
+    border-radius: 4px;
+    box-sizing: border-box;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    z-index: 2;
+    cursor: pointer;
+    transition: transform 0.1s ease-in-out;
+}
+
+.pd-entry:hover {
+    transform: scaleY(1.1);
+    z-index: 3;
+}
+
+/* Entrada DENTRO del horario laboral */
+.pd-in-hours {
+    background-color: #28a745; /* Verde estándar */
+    border: 1px solid #1e7e34;
+}
+
+/* Entrada FUERA del horario laboral (Patrón a rayas rojas) */
+.pd-out-of-hours {
+    background-color: #dc3545;
+    border: 1px solid #c82333;
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.2),
+        rgba(255, 255, 255, 0.2) 10px,
+        transparent 10px,
+        transparent 20px
+    );
+}
