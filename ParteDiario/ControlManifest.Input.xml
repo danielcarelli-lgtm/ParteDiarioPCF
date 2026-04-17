@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <manifest>
-  <control namespace="sec" constructor="ParteDiario" version="1.0.20" display-name-key="ParteDiario" description-key="Visualizador de horas imputadas del parte diario" control-type="standard" >
+  <control namespace="sec" constructor="ParteDiario" version="1.0.29" display-name-key="ParteDiario" description-key="Visualizador de horas imputadas del parte diario" control-type="standard" >
     
     <type-group name="AnyType">
       <type>SingleLine.Text</type>
@@ -18,7 +18,7 @@
     <property name="sec_horainicio" display-name-key="Hora Inicio Jornada" description-key="Hora de inicio" of-type="DateAndTime.DateAndTime" usage="input" required="false" />
     <property name="sec_horafin" display-name-key="Hora Fin Jornada" description-key="Hora de fin" of-type="DateAndTime.DateAndTime" usage="input" required="false" />
     <property name="sec_recursoid" display-name-key="Recurso" description-key="Recurso que se puede reservar" of-type="Lookup.Simple" usage="input" required="false" />
-    <property name="orientacion" display-name-key="Orientación" description-key="Mostrar la línea de tiempo en vertical si es verdadero; en horizontal si es falso" of-type="TwoOptions" usage="input" required="false" />
+    <property name="orientacion" display-name-key="Orientación Inicial" description-key="Vertical si es verdadero" of-type="TwoOptions" usage="input" required="false" />
 
     <resources>
       <code path="index.ts" order="1"/>
