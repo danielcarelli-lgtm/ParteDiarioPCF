@@ -1,9 +1,13 @@
 .pd-timeline-wrapper {
     position: relative;
     width: 100%;
-    padding: 10px 0 25px 0;
+    padding: 25px 0 25px 0;
     box-sizing: border-box;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.pd-timeline-wrapper.pd-vertical {
+    padding: 25px 0 25px 45px;
 }
 
 /* El versionado abajo a la derecha, gris y pequeño */
@@ -27,12 +31,104 @@
 .pd-timeline {
     position: relative;
     width: 100%;
-    height: 45px;
+    height: 55px;
     background-color: #e2e2e2;
     border-radius: 6px;
     box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
-    overflow: hidden;
+    overflow: visible;
     touch-action: none; /* Evita que la pantalla haga scroll al arrastrar en táctil */
+}
+
+.pd-timeline.pd-vertical {
+    width: 90px;
+    min-height: 1000px;
+}
+
+.pd-axis-vertical {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.pd-axis-vertical .pd-tick {
+    left: 100%;
+    top: auto;
+    transform: translateY(-50%);
+    text-align: left;
+    white-space: nowrap;
+    font-size: 11px;
+}
+
+.pd-axis-vertical .pd-tick::before {
+    top: 50%;
+    left: -4px;
+    width: 4px;
+    height: 1px;
+}
+
+.pd-entry {
+    position: absolute;
+    top: 18%;
+    height: 64%;
+    border-radius: 4px;
+    box-sizing: border-box;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    z-index: 2;
+    cursor: grab; /* Cursor de mano abierta */
+    transition: transform 0.1s ease-in-out, opacity 0.2s;
+    user-select: none; /* Evita selección de texto */
+}
+
+.pd-entry:hover {
+    transform: scaleY(1.15);
+    z-index: 3;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.4);
+}
+
+.pd-entry-badge {
+    position: absolute;
+    top: -24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.78);
+    color: #ffffff;
+    padding: 2px 6px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 4;
+}
+
+.pd-vertical .pd-entry-badge {
+    top: 50%;
+    left: 100%;
+    transform: translateY(-50%);
+    margin-left: 6px;
+}
+
+.pd-vertical .pd-resizer-left {
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 8px;
+    cursor: ns-resize;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+}
+
+.pd-vertical .pd-resizer-right {
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 8px;
+    cursor: ns-resize;
+    border-bottom-left-radius: 4px;
+    border-bottom-right-radius: 4px;
 }
 
 .pd-jornada {
@@ -93,19 +189,6 @@
     height: 14px;
     border-radius: 3px;
     box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-}
-
-.pd-entry {
-    position: absolute;
-    top: 10%;
-    height: 80%;
-    border-radius: 4px;
-    box-sizing: border-box;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
-    z-index: 2;
-    cursor: grab; /* Cursor de mano abierta */
-    transition: transform 0.1s ease-in-out, opacity 0.2s;
-    user-select: none; /* Evita selección de texto */
 }
 
 .pd-entry:hover {

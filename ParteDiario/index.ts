@@ -22,6 +22,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
     // Variables de estado para Drag & Drop
     private _timelineEl: HTMLDivElement;
     private _liveTooltip: HTMLDivElement;
+    private _isVertical = false;
     private _isDragging = false;
     private _dragType: 'move' | 'left' | 'right' | null = null;
     private _dragTarget: HTMLElement | null = null;
@@ -58,12 +59,24 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
             this._timelineEl.className = "pd-timeline";
             timelineWrapper.appendChild(this._timelineEl);
             
+            const params = context.parameters;
+            const orientationRaw = params.orientacion?.raw as boolean | string | undefined;
+            this._isVertical = orientationRaw === undefined || orientationRaw === null || orientationRaw === true || orientationRaw === 'vertical' || orientationRaw === 'Vertical';
+
+            if (this._isVertical) {
+                timelineWrapper.className = "pd-timeline-wrapper pd-vertical";
+            }
+
             const axisDiv = document.createElement("div");
-            axisDiv.className = "pd-axis";
+            axisDiv.className = this._isVertical ? "pd-axis pd-axis-vertical" : "pd-axis";
             for (let i = 0; i <= 24; i += 2) {
                 const tick = document.createElement("div");
-                tick.className = "pd-tick";
-                tick.style.left = `${(i / 24) * 100}%`;
+                tick.className = this._isVertical ? "pd-tick pd-tick-vertical" : "pd-tick";
+                if (this._isVertical) {
+                    tick.style.top = `${(i / 24) * 100}%`;
+                } else {
+                    tick.style.left = `${(i / 24) * 100}%`;
+                }
                 tick.innerText = `${i}:00`;
                 axisDiv.appendChild(tick);
             }
@@ -75,7 +88,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
             versionEl.innerText = this._version;
             timelineWrapper.appendChild(versionEl);
 
-            const params = context.parameters;
             const fechaRaw = params.sec_fecha?.raw;
             const inicioRaw = params.sec_horainicio?.raw;
             const finRaw = params.sec_horafin?.raw;
@@ -108,8 +120,14 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
 
             const jornadaDiv = document.createElement("div");
             jornadaDiv.className = "pd-jornada";
-            jornadaDiv.style.left = `${(inicioDecimal / 24) * 100}%`;
-            jornadaDiv.style.width = `${((finDecimal - inicioDecimal) / 24) * 100}%`;
+            if (this._isVertical) {
+                jornadaDiv.style.top = `${(inicioDecimal / 24) * 100}%`;
+                jornadaDiv.style.height = `${((finDecimal - inicioDecimal) / 24) * 100}%`;
+                jornadaDiv.style.width = `100%`;
+            } else {
+                jornadaDiv.style.left = `${(inicioDecimal / 24) * 100}%`;
+                jornadaDiv.style.width = `${((finDecimal - inicioDecimal) / 24) * 100}%`;
+            }
             jornadaDiv.title = `Jornada Laboral: ${this.formatTimeObj(hInicio)} - ${this.formatTimeObj(hFin)}`;
             this._timelineEl.appendChild(jornadaDiv);
 
@@ -142,8 +160,14 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
 
                         const entryDiv = document.createElement("div");
                         entryDiv.className = isOutOfHours ? "pd-entry pd-out-of-hours" : "pd-entry pd-in-hours";
-                        entryDiv.style.left = `${(startDec / 24) * 100}%`;
-                        entryDiv.style.width = `${((endDec - startDec) / 24) * 100}%`;
+                        if (this._isVertical) {
+                            entryDiv.style.top = `${(startDec / 24) * 100}%`;
+                            entryDiv.style.height = `${((endDec - startDec) / 24) * 100}%`;
+                            entryDiv.style.width = `100%`;
+                        } else {
+                            entryDiv.style.left = `${(startDec / 24) * 100}%`;
+                            entryDiv.style.width = `${((endDec - startDec) / 24) * 100}%`;
+                        }
                         entryDiv.style.backgroundColor = entryColor;
                         
                         // Guardar datos en el elemento para el drag and drop
@@ -153,8 +177,13 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                         entryDiv.dataset.origStart = entry.msdyn_start;
                         entryDiv.dataset.origEnd = entry.msdyn_end;
 
-                        // Tooltip normal
-                        entryDiv.title = `[${this.formatTimeObj(startEntry)} - ${this.formatTimeObj(endEntry)}] ${typeName}\nOT: ${otName}\nReserva: ${reservaName}`;
+                        const badgeText = `OT:${otName}-RES:${reservaName}`;
+                        entryDiv.title = `[${this.formatTimeObj(startEntry)} - ${this.formatTimeObj(endEntry)}] ${typeName}\n${badgeText}`;
+
+                        const badge = document.createElement("div");
+                        badge.className = "pd-entry-badge";
+                        badge.innerText = badgeText;
+                        entryDiv.appendChild(badge);
 
                         // Tiradores de redimensión
                         const resizerLeft = document.createElement("div");
@@ -174,6 +203,8 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                         this._timelineEl.appendChild(entryDiv);
                     }
                 });
+
+                this.arrangeEntryBadges();
 
                 if (typeColorMap.size > 0) {
                     const legendDiv = document.createElement("div");
@@ -232,8 +263,9 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
 
         // Calcular el offset inicial para el 'move'
         const rect = this._timelineEl.getBoundingClientRect();
-        const pointerX = e.clientX - rect.left;
-        const pointerDec = (pointerX / rect.width) * 24;
+        const pointerDec = this._isVertical
+            ? (e.clientY - rect.top) / rect.height * 24
+            : (e.clientX - rect.left) / rect.width * 24;
         this._dragData.offsetDecimal = pointerDec - this._dragData.originalStart;
 
         entryDiv.classList.add("pd-dragging");
@@ -245,18 +277,17 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         if (!this._isDragging || !this._dragTarget || !this._timelineEl) return;
 
         const rect = this._timelineEl.getBoundingClientRect();
-        // CORRECCIÓN ESLINT: Cambiado let por const
-        const pointerX = e.clientX - rect.left;
-        
+        const pointerDec = this._isVertical
+            ? Math.max(0, Math.min(24, ((e.clientY - rect.top) / rect.height) * 24))
+            : Math.max(0, Math.min(24, ((e.clientX - rect.left) / rect.width) * 24));
+
         // Calcular hora decimal basada en posición y hacer snap de 5 minutos
-        let pointerDec = Math.max(0, Math.min(24, (pointerX / rect.width) * 24));
-        pointerDec = this.snapTo5Mins(pointerDec);
+        const snappedDec = this.snapTo5Mins(pointerDec);
 
         const duration = this._dragData.originalEnd - this._dragData.originalStart;
 
         if (this._dragType === 'move') {
-            let newStart = pointerDec - this._dragData.offsetDecimal;
-            newStart = this.snapTo5Mins(newStart);
+            let newStart = this.snapTo5Mins(pointerDec - this._dragData.offsetDecimal);
             
             // Límites de colisión
             if (newStart < 0) newStart = 0;
@@ -267,15 +298,20 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
 
         } else if (this._dragType === 'left') {
             // No dejar que el inicio sobrepase al final (con 5 mins de margen mínimo)
-            this._dragData.newStart = Math.min(pointerDec, this._dragData.newEnd - (5/60));
+            this._dragData.newStart = Math.min(snappedDec, this._dragData.newEnd - (5/60));
         } else if (this._dragType === 'right') {
             // No dejar que el final sea menor al inicio
-            this._dragData.newEnd = Math.max(pointerDec, this._dragData.newStart + (5/60));
+            this._dragData.newEnd = Math.max(snappedDec, this._dragData.newStart + (5/60));
         }
 
         // Actualizar visualmente la barra
-        this._dragTarget.style.left = `${(this._dragData.newStart / 24) * 100}%`;
-        this._dragTarget.style.width = `${((this._dragData.newEnd - this._dragData.newStart) / 24) * 100}%`;
+        if (this._isVertical) {
+            this._dragTarget.style.top = `${(this._dragData.newStart / 24) * 100}%`;
+            this._dragTarget.style.height = `${((this._dragData.newEnd - this._dragData.newStart) / 24) * 100}%`;
+        } else {
+            this._dragTarget.style.left = `${(this._dragData.newStart / 24) * 100}%`;
+            this._dragTarget.style.width = `${((this._dragData.newEnd - this._dragData.newStart) / 24) * 100}%`;
+        }
 
         this.updateLiveTooltip(e.clientX, e.clientY);
     }
@@ -373,6 +409,78 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
 
         const response = await context.webAPI.retrieveMultipleRecords("msdyn_timeentry", query);
         return response.entities as ITimeEntry[];
+    }
+
+    private arrangeEntryBadges(): void {
+        if (!this._timelineEl) return;
+
+        const badges = Array.from(this._timelineEl.querySelectorAll<HTMLDivElement>(".pd-entry-badge"));
+        const rowHeight = 18;
+        const baseTop = -24;
+
+        if (this._isVertical) {
+            const columns: { top: number; bottom: number }[][] = [];
+            const gap = 8;
+
+            badges.forEach((badge) => {
+                const entry = badge.parentElement as HTMLElement | null;
+                if (!entry) return;
+
+                const entryTop = entry.offsetTop;
+                const entryHeight = entry.offsetHeight;
+                const badgeHeight = badge.offsetHeight;
+                const badgeTop = entryTop + (entryHeight / 2) - (badgeHeight / 2);
+                const badgeBottom = badgeTop + badgeHeight;
+
+                let colIndex = 0;
+                while (colIndex < columns.length) {
+                    const collision = columns[colIndex].some((placed) => !(badgeBottom <= placed.top || badgeTop >= placed.bottom));
+                    if (!collision) break;
+                    colIndex++;
+                }
+
+                if (colIndex === columns.length) {
+                    columns.push([]);
+                }
+
+                columns[colIndex].push({ top: badgeTop, bottom: badgeBottom });
+                badge.style.top = "50%";
+                badge.style.left = "100%";
+                badge.style.transform = "translateY(-50%)";
+                badge.style.marginLeft = `${colIndex * (badge.offsetWidth + gap) + 6}px`;
+            });
+            return;
+        }
+
+        const rows: { left: number; right: number }[][] = [];
+
+        badges.forEach((badge) => {
+            const entry = badge.parentElement as HTMLElement | null;
+            if (!entry) return;
+
+            const entryLeft = entry.offsetLeft;
+            const entryWidth = entry.offsetWidth;
+            const badgeWidth = badge.offsetWidth;
+            const badgeLeft = entryLeft + (entryWidth / 2) - (badgeWidth / 2);
+            const badgeRight = badgeLeft + badgeWidth;
+
+            let rowIndex = 0;
+            while (rowIndex < rows.length) {
+                const collision = rows[rowIndex].some((placed) => !(badgeRight <= placed.left || badgeLeft >= placed.right));
+                if (!collision) break;
+                rowIndex++;
+            }
+
+            if (rowIndex === rows.length) {
+                rows.push([]);
+            }
+
+            rows[rowIndex].push({ left: badgeLeft, right: badgeRight });
+            badge.style.top = `${baseTop - (rowIndex * rowHeight)}px`;
+            badge.style.left = "50%";
+            badge.style.transform = "translateX(-50%)";
+            badge.style.marginLeft = "0";
+        });
     }
 
     public getOutputs(): IOutputs { return {}; }
