@@ -15,11 +15,16 @@
     transition: background 0.2s;
 }
 
+.pd-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
 .pd-btn-primary { background: #0078d4; color: white; }
-.pd-btn-primary:hover { background: #005a9e; }
+.pd-btn-primary:hover:not(:disabled) { background: #005a9e; }
 
 .pd-btn-secondary { background: #edebe9; color: #323130; border: 1px solid #8a8886; }
-.pd-btn-secondary:hover { background: #f3f2f1; }
+.pd-btn-secondary:hover:not(:disabled) { background: #f3f2f1; }
 
 .pd-timeline-wrapper {
     position: relative;
@@ -126,3 +131,65 @@
 .pd-live-tooltip { position: fixed; background: #333; color: #fff; padding: 6px 10px; border-radius: 4px; font-size: 14px; z-index: 10000; pointer-events: none; opacity: 0; transform: translate(-50%, -130%); }
 .pd-dragging { cursor: grabbing !important; opacity: 0.8; }
 .pd-version-tag { text-align: right; font-size: 10px; color: #ccc; margin-top: 5px; }
+
+.pd-loading-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255, 255, 255, 0.6);
+    z-index: 9998;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 4px;
+}
+
+.pd-spinner {
+    border: 4px solid rgba(0, 120, 212, 0.2);
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    border-left-color: #0078d4;
+    animation: pd-spin 1s linear infinite;
+}
+
+@keyframes pd-spin { 
+    0% { transform: rotate(0deg); } 
+    100% { transform: rotate(360deg); } 
+}
+
+.pd-modal-backdrop {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 9999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.pd-modal {
+    background: white;
+    padding: 20px;
+    border-radius: 6px;
+    width: 80%;
+    max-width: 450px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.pd-modal h3 { margin: 0; font-size: 16px; color: #a80000; font-family: 'Segoe UI', sans-serif; }
+.pd-modal p { margin: 0; font-size: 13px; color: #333; font-family: 'Segoe UI', sans-serif; }
+
+.pd-modal-textarea {
+    width: 100%;
+    height: 120px;
+    resize: none;
+    font-family: monospace;
+    font-size: 12px;
+    padding: 8px;
+    box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background-color: #f9f9f9;
+}

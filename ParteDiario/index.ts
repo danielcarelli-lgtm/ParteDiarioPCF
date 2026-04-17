@@ -14,7 +14,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
 
     private _container: HTMLDivElement;
     private _context: ComponentFramework.Context<IInputs>;
-    private _version = "v1.0.29";
+    private _version = "v1.0.34";
     private _palette = ["#0078d4", "#107c10", "#d83b01", "#5c2d91", "#008272", "#a80000", "#e3008c", "#ff8c00"];
 
     private _timelineEl: HTMLDivElement;
@@ -29,6 +29,10 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
     public init(context: ComponentFramework.Context<IInputs>, notifyOutputChanged: () => void, state: ComponentFramework.Dictionary, container: HTMLDivElement): void {
         this._context = context;
         this._container = container;
+        
+        this._container.style.position = "relative";
+        this._container.style.width = "100%";
+        this._container.style.height = "100%";
 
         const orientationRaw = context.parameters.orientacion?.raw;
         this._isVertical = orientationRaw === true || orientationRaw === null;
@@ -64,8 +68,8 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
 
         const fillBtn = document.createElement("button");
         fillBtn.className = "pd-btn pd-btn-secondary";
-        fillBtn.innerText = "☕ Completar Huecos";
-        fillBtn.onclick = () => this.fillGaps().catch(err => console.error(err));
+        fillBtn.innerText = "Completar Huecos";
+        fillBtn.onclick = () => this.fillGaps(fillBtn).catch(err => console.error(err));
         toolbar.appendChild(fillBtn);
 
         this._container.appendChild(toolbar);
@@ -129,7 +133,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         try {
             const entries = await this.fetchTimeEntries(this._context, fechaRaw as Date, recursoId);
             
-            // Verificamos si este render sigue siendo el último para evitar duplicados
             if (renderId !== this._lastRenderId) return;
 
             const typeColorMap = new Map<string, string>();
@@ -225,63 +228,147 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         }
     }
 
-    private async fillGaps(): Promise<void> {
-        const params = this._context.parameters;
-        const fechaRaw = params.sec_fecha?.raw;
-        const inicioRaw = params.sec_horainicio?.raw;
-        const finRaw = params.sec_horafin?.raw;
-        const recursoRaw = params.sec_recursoid?.raw;
+    private async fillGaps(btn: HTMLButtonElement): Promise<void> {
+        try {
+            if (btn.disabled) return;
+            btn.disabled = true;
+            btn.innerText = "Procesando...";
+            this.showLoadingOverlay();
 
-        if (!fechaRaw || !inicioRaw || !finRaw || !recursoRaw) return;
+            const params = this._context.parameters;
+            const fechaRaw = params.sec_fecha?.raw;
+            const inicioRaw = params.sec_horainicio?.raw;
+            const finRaw = params.sec_horafin?.raw;
+            const recursoRaw = params.sec_recursoid?.raw;
 
-        let recursoId = "";
-        if (Array.isArray(recursoRaw) && recursoRaw.length > 0) recursoId = recursoRaw[0].id;
-        recursoId = recursoId.replace(/[{}]/g, "").toLowerCase();
-
-        const hInicio = new Date(inicioRaw as Date);
-        const hFin = new Date(finRaw as Date);
-        const inicioDec = hInicio.getHours() + (hInicio.getMinutes() / 60);
-        const finDec = hFin.getHours() + (hFin.getMinutes() / 60);
-
-        const entries = await this.fetchTimeEntries(this._context, fechaRaw as Date, recursoId);
-        
-        const sorted = entries
-            .map(e => ({ 
-                start: new Date(e.msdyn_start!).getHours() + (new Date(e.msdyn_start!).getMinutes() / 60), 
-                end: new Date(e.msdyn_end!).getHours() + (new Date(e.msdyn_end!).getMinutes() / 60) 
-            }))
-            .sort((a, b) => a.start - b.start);
-
-        const gaps: { s: number, e: number }[] = [];
-        let currentPos = inicioDec;
-
-        for (const entry of sorted) {
-            if (entry.start > currentPos + 0.02) {
-                gaps.push({ s: currentPos, e: entry.start });
+            if (!fechaRaw || !inicioRaw || !finRaw || !recursoRaw) {
+                throw new Error("Faltan parámetros del formulario para completar los huecos.");
             }
-            currentPos = Math.max(currentPos, entry.end);
+
+            let recursoId = "";
+            if (Array.isArray(recursoRaw) && recursoRaw.length > 0) recursoId = recursoRaw[0].id;
+            recursoId = recursoId.replace(/[{}]/g, "").toLowerCase();
+
+            const hInicio = new Date(inicioRaw as Date);
+            const hFin = new Date(finRaw as Date);
+            const inicioDec = hInicio.getHours() + (hInicio.getMinutes() / 60);
+            const finDec = hFin.getHours() + (hFin.getMinutes() / 60);
+
+            const entries = await this.fetchTimeEntries(this._context, fechaRaw as Date, recursoId);
+            
+            const sorted = entries
+                .map(e => ({ 
+                    start: new Date(e.msdyn_start!).getHours() + (new Date(e.msdyn_start!).getMinutes() / 60), 
+                    end: new Date(e.msdyn_end!).getHours() + (new Date(e.msdyn_end!).getMinutes() / 60) 
+                }))
+                .sort((a, b) => a.start - b.start);
+
+            const gaps: { s: number, e: number }[] = [];
+            let currentPos = inicioDec;
+
+            for (const entry of sorted) {
+                if (entry.start > currentPos + 0.02) {
+                    gaps.push({ s: currentPos, e: entry.start });
+                }
+                currentPos = Math.max(currentPos, entry.end);
+            }
+
+            if (currentPos < finDec - 0.02) {
+                gaps.push({ s: currentPos, e: finDec });
+            }
+
+            if (gaps.length > 0) {
+                const baseDate = new Date(fechaRaw as Date);
+                for (const gap of gaps) {
+                    // Cálculo de duración en minutos
+                    const durationMinutes = Math.round((gap.e - gap.s) * 60);
+                    
+                    const data: ComponentFramework.WebApi.Entity = {
+                        "msdyn_start": this.applyTimeToDateStr(baseDate.toISOString(), gap.s),
+                        "msdyn_end": this.applyTimeToDateStr(baseDate.toISOString(), gap.e),
+                        "msdyn_duration": durationMinutes,
+                        "msdyn_type": 192355000, 
+                        "msdyn_bookableresource@odata.bind": `/bookableresources(${recursoId})`
+                    };
+                    await this._context.webAPI.createRecord("msdyn_timeentry", data);
+                }
+            }
+
+            await this.renderTimeline();
+
+        } catch (error: unknown) {
+            console.error("Error al completar huecos:", error);
+            this.hideLoadingOverlay();
+            btn.disabled = false;
+            btn.innerText = "Completar Huecos";
+            this.showErrorModal(error);
         }
+    }
 
-        if (currentPos < finDec - 0.02) {
-            gaps.push({ s: currentPos, e: finDec });
+    private showLoadingOverlay(): void {
+        let overlay = this._container.querySelector('.pd-loading-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.className = 'pd-loading-overlay';
+            const spinner = document.createElement('div');
+            spinner.className = 'pd-spinner';
+            overlay.appendChild(spinner);
+            this._container.appendChild(overlay);
         }
+    }
 
-        if (gaps.length === 0) return;
+    private hideLoadingOverlay(): void {
+        const overlay = this._container.querySelector('.pd-loading-overlay');
+        if (overlay && overlay.parentNode) {
+            overlay.parentNode.removeChild(overlay);
+        }
+    }
 
-        const baseDate = new Date(fechaRaw as Date);
-        const promises = gaps.map(gap => {
-            // Se define el tipo del objeto para evitar el error 'any' de ESLint
-            const data: ComponentFramework.WebApi.Entity = {
-                "msdyn_start": this.applyTimeToDateStr(baseDate.toISOString(), gap.s),
-                "msdyn_end": this.applyTimeToDateStr(baseDate.toISOString(), gap.e),
-                "msdyn_type": 4, 
-                "msdyn_bookableresource@odata.bind": `/bookableresources(${recursoId})`
-            };
-            return this._context.webAPI.createRecord("msdyn_timeentry", data);
-        });
+    private showErrorModal(error: unknown): void {
+        const backdrop = document.createElement("div");
+        backdrop.className = "pd-modal-backdrop";
 
-        await Promise.all(promises);
-        await this.renderTimeline();
+        const modal = document.createElement("div");
+        modal.className = "pd-modal";
+
+        const title = document.createElement("h3");
+        title.innerText = "⚠️ Error en la operación";
+        modal.appendChild(title);
+
+        const text = document.createElement("p");
+        text.innerText = "Ha ocurrido un problema. Puedes copiar el texto inferior para reportarlo:";
+        modal.appendChild(text);
+
+        const textarea = document.createElement("textarea");
+        textarea.className = "pd-modal-textarea";
+        textarea.readOnly = true;
+        
+        let errMsg = "Error desconocido";
+        if (error instanceof Error) {
+            errMsg = error.message;
+        } else if (typeof error === "string") {
+            errMsg = error;
+        } else if (error && typeof error === "object") {
+            const errObj = error as Record<string, unknown>;
+            if (typeof errObj.message === "string") {
+                errMsg = errObj.message;
+            } else {
+                errMsg = JSON.stringify(error, null, 2);
+            }
+        }
+        textarea.value = errMsg;
+        modal.appendChild(textarea);
+
+        const closeBtn = document.createElement("button");
+        closeBtn.className = "pd-btn pd-btn-primary";
+        closeBtn.innerText = "Cerrar";
+        closeBtn.onclick = () => {
+            if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+        };
+        modal.appendChild(closeBtn);
+
+        backdrop.appendChild(modal);
+        this._container.appendChild(backdrop);
     }
 
     private onPointerDown(e: PointerEvent): void {
@@ -354,8 +441,17 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                     msdyn_start: this.applyTimeToDateStr(this._dragData.origStartDate, this._dragData.newStart),
                     msdyn_end: this.applyTimeToDateStr(this._dragData.origEndDate, this._dragData.newEnd)
                 };
-                await this._context.webAPI.updateRecord("msdyn_timeentry", this._dragData.id, payload);
-                await this.renderTimeline();
+                
+                try {
+                    this.showLoadingOverlay();
+                    await this._context.webAPI.updateRecord("msdyn_timeentry", this._dragData.id, payload);
+                    await this.renderTimeline();
+                } catch (error: unknown) {
+                    this.hideLoadingOverlay();
+                    this.showErrorModal(error);
+                    this._dragTarget.style.opacity = "1";
+                    await this.renderTimeline(); 
+                }
             }
         }
         this._dragTarget = null;
