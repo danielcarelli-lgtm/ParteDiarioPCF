@@ -1,9 +1,30 @@
 .pd-toolbar {
     padding-bottom: 15px;
     display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
     gap: 10px;
+}
+
+.pd-toolbar-actions {
+    display: flex;
+    gap: 8px;
     flex-wrap: wrap;
 }
+
+.pd-totals {
+    background: #e1dfdd;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #323130;
+    display: flex;
+    gap: 15px;
+}
+
+.pd-total-imputado strong { color: #0078d4; }
+.pd-total-jornada { color: #605e5c; border-left: 1px solid #c8c6c4; padding-left: 15px; }
 
 .pd-btn {
     border: none;
@@ -15,14 +36,9 @@
     transition: background 0.2s;
 }
 
-.pd-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
-
+.pd-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .pd-btn-primary { background: #0078d4; color: white; }
 .pd-btn-primary:hover:not(:disabled) { background: #005a9e; }
-
 .pd-btn-secondary { background: #edebe9; color: #323130; border: 1px solid #8a8886; }
 .pd-btn-secondary:hover:not(:disabled) { background: #f3f2f1; }
 
@@ -101,6 +117,27 @@
 .pd-timeline.pd-horizontal .pd-entry-badge { top: -22px; left: 50%; transform: translateX(-50%); }
 .pd-timeline.pd-vertical .pd-entry-badge { top: 5px; left: 105%; }
 
+/* Botón Delete */
+.pd-delete-btn {
+    position: absolute;
+    right: 2px;
+    top: 2px;
+    width: 14px;
+    height: 14px;
+    background: rgba(0, 0, 0, 0.4);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    cursor: pointer;
+    z-index: 20;
+    transition: background 0.2s;
+}
+
+.pd-delete-btn:hover { background: rgba(168, 0, 0, 0.8); }
+
 .pd-jornada {
     position: absolute;
     background-color: rgba(0, 120, 212, 0.08);
@@ -130,6 +167,8 @@
 
 .pd-live-tooltip { position: fixed; background: #333; color: #fff; padding: 6px 10px; border-radius: 4px; font-size: 14px; z-index: 10000; pointer-events: none; opacity: 0; transform: translate(-50%, -130%); }
 .pd-dragging { cursor: grabbing !important; opacity: 0.8; }
+.pd-dragging .pd-delete-btn { display: none; }
+
 .pd-version-tag { text-align: right; font-size: 10px; color: #ccc; margin-top: 5px; }
 
 .pd-loading-overlay {
@@ -180,6 +219,21 @@
 
 .pd-modal h3 { margin: 0; font-size: 16px; color: #a80000; font-family: 'Segoe UI', sans-serif; }
 .pd-modal p { margin: 0; font-size: 13px; color: #333; font-family: 'Segoe UI', sans-serif; }
+
+.pd-input {
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 13px;
+}
+
+.pd-modal label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+    margin-top: 5px;
+}
 
 .pd-modal-textarea {
     width: 100%;
