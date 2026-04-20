@@ -12,9 +12,20 @@ interface ITimeEntry extends ComponentFramework.WebApi.Entity {
 
 export class ParteDiario implements ComponentFramework.StandardControl<IInputs, IOutputs> {
 
+    // =========================================================================
+    // CONFIGURACIÓN DE ESTADOS
+    // Todos estos statuscode pertenecen al statecode 0 (Activo)
+    // =========================================================================
+    private readonly STATE_ACTIVO = 0; 
+    private readonly STATUS_BORRADOR = 1;  
+    private readonly STATUS_ENVIADO = 909540001;   
+    private readonly STATUS_APROBADO = 909540002;  
+    // =========================================================================
+
     private _container: HTMLDivElement;
     private _context: ComponentFramework.Context<IInputs>;
-    private _version = "v1.0.38";
+    private _notifyOutputChanged: () => void;
+    private _version = "v1.0.45";
     private _palette = ["#0078d4", "#107c10", "#d83b01", "#5c2d91", "#008272", "#a80000", "#e3008c", "#ff8c00"];
 
     private _timelineEl: HTMLDivElement;
@@ -25,6 +36,8 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
     private _minViewHour = 0;
     private _maxViewHour = 24;
     private _lastRenderId = 0;
+    private _isReadOnly = false;
+    private _pendingStatusCode: number | null = null;
     
     private _currentEntries: { id: string, startDec: number, endDec: number }[] = [];
 
@@ -34,6 +47,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
 
     public init(context: ComponentFramework.Context<IInputs>, notifyOutputChanged: () => void, state: ComponentFramework.Dictionary, container: HTMLDivElement): void {
         this._context = context;
+        this._notifyOutputChanged = notifyOutputChanged;
         this._container = container;
         
         this._container.style.position = "relative";
@@ -67,10 +81,15 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         const finRaw = params.sec_horafin?.raw;
         const recursoRaw = params.sec_recursoid?.raw;
 
+        const inputParams = params as unknown as { sec_estadoparte?: { raw: number | null } };
+        const estadoRaw = inputParams.sec_estadoparte?.raw;
+        
+        const estadoActual = this._pendingStatusCode !== null ? this._pendingStatusCode : (estadoRaw !== undefined && estadoRaw !== null ? estadoRaw : this.STATUS_BORRADOR);
+        this._isReadOnly = (estadoActual === this.STATUS_ENVIADO || estadoActual === this.STATUS_APROBADO);
+
         let recursoId = "";
         if (Array.isArray(recursoRaw) && recursoRaw.length > 0) recursoId = recursoRaw[0].id;
 
-        // Extraer horas estrictamente en UTC para evitar desfases de Zona Horaria
         const inicioDecimal = this.getTimeDecFromDate(inicioRaw as Date);
         const finDecimal = this.getTimeDecFromDate(finRaw as Date);
 
@@ -106,20 +125,29 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         const refreshBtn = document.createElement("button");
         refreshBtn.className = "pd-btn pd-btn-secondary";
         refreshBtn.innerText = "🔄 Refrescar";
-        refreshBtn.onclick = () => { this.showLoadingOverlay(); this.renderTimeline(); };
+        refreshBtn.onclick = () => { 
+            this.showLoadingOverlay(); 
+            const ctxPage = this._context as unknown as { page?: { data?: { refresh?: () => void } } };
+            if (ctxPage.page && ctxPage.page.data && typeof ctxPage.page.data.refresh === 'function') {
+                ctxPage.page.data.refresh();
+            }
+            this.renderTimeline(); 
+        };
         actionsDiv.appendChild(refreshBtn);
 
-        const lunchBtn = document.createElement("button");
-        lunchBtn.className = "pd-btn pd-btn-primary";
-        lunchBtn.innerText = "🍔 Crear Almuerzo";
-        lunchBtn.onclick = () => this.showLunchModal();
-        actionsDiv.appendChild(lunchBtn);
+        if (!this._isReadOnly) {
+            const lunchBtn = document.createElement("button");
+            lunchBtn.className = "pd-btn pd-btn-primary";
+            lunchBtn.innerText = "🍔 Crear Almuerzo";
+            lunchBtn.onclick = () => this.showLunchModal();
+            actionsDiv.appendChild(lunchBtn);
 
-        const fillBtn = document.createElement("button");
-        fillBtn.className = "pd-btn pd-btn-primary";
-        fillBtn.innerText = "Completar Huecos";
-        fillBtn.onclick = () => this.fillGaps(fillBtn).catch(err => console.error(err));
-        actionsDiv.appendChild(fillBtn);
+            const fillBtn = document.createElement("button");
+            fillBtn.className = "pd-btn pd-btn-primary";
+            fillBtn.innerText = "Completar Huecos";
+            fillBtn.onclick = () => this.fillGaps(fillBtn).catch(err => console.error(err));
+            actionsDiv.appendChild(fillBtn);
+        }
 
         toolbar.appendChild(actionsDiv);
 
@@ -161,7 +189,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         this._container.appendChild(timelineWrapper);
 
         if (!fechaRaw || !inicioRaw || !finRaw || !recursoId) return;
-
         recursoId = recursoId.replace(/[{}]/g, "").toLowerCase();
 
         const jornadaDiv = document.createElement("div");
@@ -180,8 +207,22 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
 
         try {
             const entries = await this.fetchTimeEntries(this._context, fechaRaw as Date, recursoId);
-            
             if (renderId !== this._lastRenderId) return;
+
+            const overlappingIds = new Set<string>();
+            for (let i = 0; i < entries.length; i++) {
+                for (let j = i + 1; j < entries.length; j++) {
+                    const aStart = new Date(entries[i].msdyn_start!).getTime();
+                    const aEnd = new Date(entries[i].msdyn_end!).getTime();
+                    const bStart = new Date(entries[j].msdyn_start!).getTime();
+                    const bEnd = new Date(entries[j].msdyn_end!).getTime();
+
+                    if (aStart < bEnd && bStart < aEnd) {
+                        overlappingIds.add(entries[i].msdyn_timeentryid!);
+                        overlappingIds.add(entries[j].msdyn_timeentryid!);
+                    }
+                }
+            }
 
             const typeColorMap = new Map<string, string>();
             let colorIndex = 0;
@@ -211,7 +252,15 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                     const entryDiv = document.createElement("div");
                     entryDiv.className = isOutOfHours ? "pd-entry pd-out-of-hours" : "pd-entry";
 
-                    // Si está haciendo zoom y la entrada está fuera de la vista, la ocultamos
+                    if (overlappingIds.has(entry.msdyn_timeentryid!)) {
+                        entryDiv.classList.add("pd-entry-overlap");
+                        const warnIcon = document.createElement("div");
+                        warnIcon.className = "pd-overlap-icon";
+                        warnIcon.innerText = "⚠️";
+                        warnIcon.title = "Solapamiento detectado";
+                        entryDiv.appendChild(warnIcon);
+                    }
+
                     if (this._isZoomed && (endDec <= this._minViewHour || startDec >= this._maxViewHour)) {
                         entryDiv.style.display = "none";
                     }
@@ -246,7 +295,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                     badge.innerText = `OT:${otName}`;
                     entryDiv.appendChild(badge);
 
-                    if (entry.msdyn_type === 192355000) {
+                    if (entry.msdyn_type === 192355000 && !this._isReadOnly) {
                         const deleteBtn = document.createElement("div");
                         deleteBtn.className = "pd-delete-btn";
                         deleteBtn.innerHTML = "&times;";
@@ -267,14 +316,18 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                         entryDiv.appendChild(deleteBtn);
                     }
 
-                    const resizerLeft = document.createElement("div");
-                    resizerLeft.className = "pd-resizer pd-resizer-left";
-                    const resizerRight = document.createElement("div");
-                    resizerRight.className = "pd-resizer pd-resizer-right";
+                    if (!this._isReadOnly) {
+                        const resizerLeft = document.createElement("div");
+                        resizerLeft.className = "pd-resizer pd-resizer-left";
+                        const resizerRight = document.createElement("div");
+                        resizerRight.className = "pd-resizer pd-resizer-right";
 
-                    entryDiv.appendChild(resizerLeft);
-                    entryDiv.appendChild(resizerRight);
-                    entryDiv.addEventListener("pointerdown", this.onPointerDown.bind(this));
+                        entryDiv.appendChild(resizerLeft);
+                        entryDiv.appendChild(resizerRight);
+                        entryDiv.addEventListener("pointerdown", this.onPointerDown.bind(this));
+                    } else {
+                        entryDiv.style.cursor = "default"; 
+                    }
 
                     this._timelineEl.appendChild(entryDiv);
                 }
@@ -305,6 +358,63 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
 
             totalsDiv.innerHTML = `<span class="pd-total-imputado">⏳ Imputado: <strong>${hT}h ${String(mT).padStart(2,'0')}m</strong></span><span class="pd-total-jornada">Jornada: ${hW}h ${String(mW).padStart(2,'0')}m</span>${missingHtml}`;
 
+            // =====================================================================
+            // ENVÍO DE FORMULARIO - CHANGE STATE POR WEBAPI
+            // =====================================================================
+            if (!this._isReadOnly && missingMins <= 0) {
+                const sendBtn = document.createElement("button");
+                sendBtn.className = "pd-btn pd-btn-success";
+                sendBtn.innerText = "🚀 Enviar Parte";
+                sendBtn.onclick = () => {
+                    if (confirm("¿Estás seguro de enviar el parte? Al hacerlo se bloqueará y ya no podrás modificar las horas.")) {
+                        
+                        const ctxPage = this._context as unknown as { mode?: { contextInfo?: { entityId?: string, entityTypeName?: string } }, page?: { entityId?: string, entityTypeName?: string, data?: { save?: () => Promise<void>, refresh?: () => void } } };
+                        const recordId = ctxPage.page?.entityId || ctxPage.mode?.contextInfo?.entityId;
+                        const logicalName = ctxPage.page?.entityTypeName || ctxPage.mode?.contextInfo?.entityTypeName;
+
+                        if (recordId && logicalName) {
+                            this.showLoadingOverlay();
+                            
+                            const processChangeState = async () => {
+                                try {
+                                    // 1. Guardar formulario para afianzar cualquier cambio manual reciente
+                                    if (ctxPage.page?.data && typeof ctxPage.page.data.save === 'function') {
+                                        await ctxPage.page.data.save();
+                                    }
+
+                                    // 2. Modificar el Estado (statecode Activo, statuscode Enviado)
+                                    const payload = {
+                                        "statecode": this.STATE_ACTIVO,
+                                        "statuscode": this.STATUS_ENVIADO
+                                    };
+                                    await this._context.webAPI.updateRecord(logicalName, recordId, payload);
+
+                                    // 3. Refrescar la pantalla
+                                    if (ctxPage.page?.data && typeof ctxPage.page.data.refresh === 'function') {
+                                        ctxPage.page.data.refresh();
+                                    }
+
+                                    // 4. Bloquear el componente localmente
+                                    this._pendingStatusCode = this.STATUS_ENVIADO;
+                                    this._isReadOnly = true;
+                                    this.renderTimeline();
+                                    
+                                } catch (error: unknown) {
+                                    this.hideLoadingOverlay();
+                                    this.showErrorModal(error);
+                                    this.renderTimeline();
+                                }
+                            };
+
+                            processChangeState();
+                        } else {
+                            alert("⚠️ Error: No se ha podido obtener el identificador (ID) del Parte Diario para ejecutar el Cambio de Estado. Asegúrese de que el registro está creado y guardado.");
+                        }
+                    }
+                };
+                actionsDiv.appendChild(sendBtn);
+            }
+
             this.arrangeEntryBadges();
 
             if (typeColorMap.size > 0) {
@@ -330,7 +440,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
             versionEl.innerText = this._version;
             this._container.appendChild(versionEl);
             
-            // Si todo fue bien y había overlay, lo ocultamos
             this.hideLoadingOverlay();
 
         } catch (err) {
@@ -591,8 +700,9 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
     }
 
     private onPointerDown(e: PointerEvent): void {
+        if (this._isReadOnly) return;
+
         const target = e.target as HTMLElement;
-        
         if (target.classList.contains('pd-delete-btn')) return;
 
         const entryDiv = target.closest('.pd-entry') as HTMLElement;
@@ -650,11 +760,10 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         const duration = this._dragData.originalEnd - this._dragData.originalStart;
 
         if (this._dragType === 'move') {
-            let proposedStart = Math.round((pointerDec - this._dragData.offsetDecimal) * 12) / 12; // Snap cada 5 min
-            const halfHourSnap = Math.round(proposedStart * 2) / 2; // Imán a las medias horas (30 min / 00 min)
+            let proposedStart = Math.round((pointerDec - this._dragData.offsetDecimal) * 12) / 12;
+            const halfHourSnap = Math.round(proposedStart * 2) / 2;
             
             if (Math.abs(proposedStart - halfHourSnap) < (10 / 60)) proposedStart = halfHourSnap;
-            
             proposedStart = Math.max(this._dragData.minBound, Math.min(this._dragData.maxBound - duration, proposedStart));
             
             this._dragData.newStart = proposedStart;
@@ -665,7 +774,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
             const halfHourSnap = Math.round(pointerDec * 2) / 2;
             
             if (Math.abs(pointerDec - halfHourSnap) < (10 / 60)) proposedStart = halfHourSnap;
-
             proposedStart = Math.max(this._dragData.minBound, proposedStart);
             this._dragData.newStart = Math.min(proposedStart, this._dragData.newEnd - (5/60));
 
@@ -674,7 +782,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
             const halfHourSnap = Math.round(pointerDec * 2) / 2;
             
             if (Math.abs(pointerDec - halfHourSnap) < (10 / 60)) proposedEnd = halfHourSnap;
-
             proposedEnd = Math.min(this._dragData.maxBound, proposedEnd);
             this._dragData.newEnd = Math.max(proposedEnd, this._dragData.newStart + (5/60));
         }
@@ -736,7 +843,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
 
     private getTimeDecFromDate(d: Date | undefined): number {
         if (!d) return 0;
-        // Obliga a usar la hora UTC para evitar el desfase de la zona horaria del PC
         return d.getUTCHours() + (d.getUTCMinutes() / 60);
     }
 
@@ -744,7 +850,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         const d = new Date(origIsoString);
         const h = Math.floor(decimalHours);
         const m = Math.round((decimalHours - h) * 60);
-        // Obliga a setear la hora en UTC para que Field Service reciba la hora exacta que el usuario ve
         d.setUTCHours(h, m, 0, 0);
         return d.toISOString();
     }
@@ -805,7 +910,14 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         }
     }
 
-    public getOutputs(): IOutputs { return {}; }
+    public getOutputs(): IOutputs { 
+        const outputs: Record<string, number> = {};
+        if (this._pendingStatusCode !== null) {
+            outputs.sec_estadoparte = this._pendingStatusCode;
+        }
+        return outputs as unknown as IOutputs;
+    }
+
     public destroy(): void { 
         if (this._liveTooltip?.parentNode) this._liveTooltip.parentNode.removeChild(this._liveTooltip);
     }

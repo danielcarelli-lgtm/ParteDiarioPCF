@@ -41,6 +41,8 @@
 .pd-btn-primary:hover:not(:disabled) { background: #005a9e; }
 .pd-btn-secondary { background: #edebe9; color: #323130; border: 1px solid #8a8886; }
 .pd-btn-secondary:hover:not(:disabled) { background: #f3f2f1; }
+.pd-btn-success { background: #107c10; color: white; }
+.pd-btn-success:hover:not(:disabled) { background: #0b5a0b; }
 
 .pd-timeline-wrapper {
     position: relative;
@@ -87,6 +89,26 @@
 
 .pd-entry-horizontal { top: 15%; height: 70%; }
 
+.pd-entry-overlap {
+    box-shadow: inset 0 0 0 2px #a80000 !important;
+    background-image: repeating-linear-gradient(45deg, rgba(168, 0, 0, 0.15), rgba(168, 0, 0, 0.15) 10px, transparent 10px, transparent 20px) !important;
+}
+
+.pd-overlap-icon {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    font-size: 11px;
+    z-index: 5;
+    background: rgba(255,255,255,0.7);
+    border-radius: 50%;
+    width: 14px;
+    height: 14px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
 .pd-out-of-hours {
     background-image: linear-gradient(45deg, rgba(255,255,255,0.2) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0.2) 75%, transparent 75%, transparent);
     background-size: 15px 15px;
@@ -117,7 +139,6 @@
 .pd-timeline.pd-horizontal .pd-entry-badge { top: -22px; left: 50%; transform: translateX(-50%); }
 .pd-timeline.pd-vertical .pd-entry-badge { top: 5px; left: 105%; }
 
-/* Botón Delete */
 .pd-delete-btn {
     position: absolute;
     right: 2px;

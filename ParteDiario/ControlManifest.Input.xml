@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <manifest>
-  <control namespace="sec" constructor="ParteDiario" version="1.0.38" display-name-key="ParteDiario" description-key="Visualizador de horas imputadas del parte diario" control-type="standard" >
+  <control namespace="sec" constructor="ParteDiario" version="1.0.45" display-name-key="ParteDiario" description-key="Visualizador de horas imputadas del parte diario" control-type="standard" >
     
     <type-group name="AnyType">
       <type>SingleLine.Text</type>
@@ -10,6 +10,7 @@
       <type>Lookup.Simple</type>
       <type>TwoOptions</type>
       <type>Whole.None</type>
+      <type>OptionSet</type>
     </type-group>
 
     <property name="boundField" display-name-key="Campo Base" description-key="Campo base donde se aloja el control" of-type-group="AnyType" usage="bound" required="true" />
@@ -19,6 +20,7 @@
     <property name="sec_horafin" display-name-key="Hora Fin Jornada" description-key="Hora de fin" of-type="DateAndTime.DateAndTime" usage="input" required="false" />
     <property name="sec_recursoid" display-name-key="Recurso" description-key="Recurso que se puede reservar" of-type="Lookup.Simple" usage="input" required="false" />
     <property name="orientacion" display-name-key="Orientación Inicial" description-key="Vertical si es verdadero" of-type="TwoOptions" usage="input" required="false" />
+    <property name="sec_estadoparte" display-name-key="Estado (statuscode)" description-key="Vincular a la razón para el estado del parte diario" of-type="OptionSet" usage="bound" required="true" />
 
     <resources>
       <code path="index.ts" order="1"/>
