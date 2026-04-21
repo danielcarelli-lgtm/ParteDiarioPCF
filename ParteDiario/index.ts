@@ -10,6 +10,35 @@ interface ITimeEntry extends ComponentFramework.WebApi.Entity {
     "_msdyn_workorder_value@OData.Community.Display.V1.FormattedValue"?: string;
 }
 
+interface IXrmAttribute {
+    getValue: () => number | string | null | undefined;
+}
+
+interface IXrm {
+    Page?: {
+        data?: {
+            refresh?: () => Promise<void>;
+            save?: () => Promise<void>;
+        };
+        getAttribute?: (fieldName: string) => IXrmAttribute | null;
+        ui?: {
+            getFormType?: () => number;
+        };
+    };
+}
+
+interface IInternalContext {
+    mode?: { contextInfo?: { entityId?: string, entityTypeName?: string } };
+    page?: {
+        entityId?: string;
+        entityTypeName?: string;
+        data?: {
+            save?: () => Promise<void>;
+            refresh?: () => void;
+        };
+    };
+}
+
 export class ParteDiario implements ComponentFramework.StandardControl<IInputs, IOutputs> {
 
     // =========================================================================
@@ -25,7 +54,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
     private _container: HTMLDivElement;
     private _context: ComponentFramework.Context<IInputs>;
     private _notifyOutputChanged: () => void;
-    private _version = "v1.0.45";
+    private _version = "v1.0.50";
     private _palette = ["#0078d4", "#107c10", "#d83b01", "#5c2d91", "#008272", "#a80000", "#e3008c", "#ff8c00"];
 
     private _timelineEl: HTMLDivElement;
@@ -81,11 +110,49 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         const finRaw = params.sec_horafin?.raw;
         const recursoRaw = params.sec_recursoid?.raw;
 
-        const inputParams = params as unknown as { sec_estadoparte?: { raw: number | null } };
-        const estadoRaw = inputParams.sec_estadoparte?.raw;
+        // 1. Extraer el estado primario de los parámetros de PCF
+        let estadoRaw: number | null = null;
+        if (params.sec_estadoparte && params.sec_estadoparte.raw !== null && params.sec_estadoparte.raw !== undefined) {
+            estadoRaw = Number(params.sec_estadoparte.raw);
+        }
+
+        const globalWindow = window as unknown as { Xrm?: IXrm };
+        const xrm = globalWindow.Xrm;
+
+        // 2. FALLBACK CRÍTICO: Si PCF devuelve null (común en OnLoad si el campo está de solo lectura/bloqueado)
+        if (estadoRaw === null || isNaN(estadoRaw)) {
+            if (xrm && xrm.Page && typeof xrm.Page.getAttribute === 'function') {
+                // Obtenemos el nombre lógico del campo vinculado de forma segura
+                const fieldObj = params.sec_estadoparte as unknown as Record<string, unknown>;
+                const attributes = fieldObj.attributes as Record<string, string> | undefined;
+                const logicalName = (attributes && attributes.LogicalName) ? attributes.LogicalName : "statuscode";
+                
+                const attr = xrm.Page.getAttribute(logicalName);
+                if (attr && typeof attr.getValue === 'function') {
+                    const val = attr.getValue();
+                    if (val !== null && val !== undefined) {
+                        estadoRaw = Number(val);
+                    }
+                }
+            }
+        }
         
-        const estadoActual = this._pendingStatusCode !== null ? this._pendingStatusCode : (estadoRaw !== undefined && estadoRaw !== null ? estadoRaw : this.STATUS_BORRADOR);
-        this._isReadOnly = (estadoActual === this.STATUS_ENVIADO || estadoActual === this.STATUS_APROBADO);
+        // 3. Determinar el Estado Final (Prioriza el local enviado si existe)
+        const estadoActual = this._pendingStatusCode !== null ? this._pendingStatusCode : 
+                            (estadoRaw !== null && !isNaN(estadoRaw) ? estadoRaw : this.STATUS_BORRADOR);
+        
+        // 4. Determinar si el control entero debe deshabilitarse
+        let isFormDisabled = this._context.mode.isControlDisabled;
+        if (xrm && xrm.Page && xrm.Page.ui && typeof xrm.Page.ui.getFormType === 'function') {
+            const formType = xrm.Page.ui.getFormType();
+            // 3: Read Only, 4: Disabled (El formulario nativo está bloqueado)
+            if (formType === 3 || formType === 4) { 
+                isFormDisabled = true;
+            }
+        }
+
+        // 5. Bloquear si el componente está deshabilitado a nivel general O si el estado específico es Enviado/Aprobado
+        this._isReadOnly = isFormDisabled || (estadoActual === this.STATUS_ENVIADO || estadoActual === this.STATUS_APROBADO);
 
         let recursoId = "";
         if (Array.isArray(recursoRaw) && recursoRaw.length > 0) recursoId = recursoRaw[0].id;
@@ -113,13 +180,13 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         const toggleBtn = document.createElement("button");
         toggleBtn.className = "pd-btn pd-btn-secondary";
         toggleBtn.innerText = this._isVertical ? "↔️ Vista Horizontal" : "↕️ Vista Vertical";
-        toggleBtn.onclick = () => { this._isVertical = !this._isVertical; this.renderTimeline(); };
+        toggleBtn.onclick = () => { this._isVertical = !this._isVertical; void this.renderTimeline(); };
         actionsDiv.appendChild(toggleBtn);
 
         const zoomBtn = document.createElement("button");
         zoomBtn.className = "pd-btn pd-btn-secondary";
         zoomBtn.innerText = this._isZoomed ? "🔍 Ver 24h" : "🔍 Zoom Jornada";
-        zoomBtn.onclick = () => { this._isZoomed = !this._isZoomed; this.renderTimeline(); };
+        zoomBtn.onclick = () => { this._isZoomed = !this._isZoomed; void this.renderTimeline(); };
         actionsDiv.appendChild(zoomBtn);
 
         const refreshBtn = document.createElement("button");
@@ -127,11 +194,23 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         refreshBtn.innerText = "🔄 Refrescar";
         refreshBtn.onclick = () => { 
             this.showLoadingOverlay(); 
-            const ctxPage = this._context as unknown as { page?: { data?: { refresh?: () => void } } };
-            if (ctxPage.page && ctxPage.page.data && typeof ctxPage.page.data.refresh === 'function') {
-                ctxPage.page.data.refresh();
+            if (xrm && xrm.Page && xrm.Page.data && typeof xrm.Page.data.refresh === 'function') {
+                xrm.Page.data.refresh()
+                    .then(() => {
+                        void this.renderTimeline();
+                        return null;
+                    })
+                    .catch(() => {
+                        void this.renderTimeline();
+                        return null;
+                    });
+            } else {
+                const ctxPage = this._context as unknown as IInternalContext;
+                if (ctxPage.page && ctxPage.page.data && typeof ctxPage.page.data.refresh === 'function') {
+                    ctxPage.page.data.refresh();
+                }
+                void this.renderTimeline(); 
             }
-            this.renderTimeline(); 
         };
         actionsDiv.appendChild(refreshBtn);
 
@@ -145,7 +224,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
             const fillBtn = document.createElement("button");
             fillBtn.className = "pd-btn pd-btn-primary";
             fillBtn.innerText = "Completar Huecos";
-            fillBtn.onclick = () => this.fillGaps(fillBtn).catch(err => console.error(err));
+            fillBtn.onclick = () => { void this.fillGaps(fillBtn).catch(err => console.error(err)); };
             actionsDiv.appendChild(fillBtn);
         }
 
@@ -300,17 +379,19 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                         deleteBtn.className = "pd-delete-btn";
                         deleteBtn.innerHTML = "&times;";
                         deleteBtn.title = "Eliminar entrada";
-                        deleteBtn.addEventListener("pointerdown", async (ev) => {
+                        deleteBtn.addEventListener("pointerdown", (ev) => {
                             ev.stopPropagation(); 
                             if(confirm("¿Estás seguro de que quieres eliminar esta entrada de descanso?")) {
-                                try {
-                                    this.showLoadingOverlay();
-                                    await this._context.webAPI.deleteRecord("msdyn_timeentry", entry.msdyn_timeentryid!);
-                                    await this.renderTimeline();
-                                } catch (error) {
-                                    this.hideLoadingOverlay();
-                                    this.showErrorModal(error);
-                                }
+                                this.showLoadingOverlay();
+                                this._context.webAPI.deleteRecord("msdyn_timeentry", entry.msdyn_timeentryid!)
+                                    .then(() => {
+                                        void this.renderTimeline();
+                                        return null;
+                                    })
+                                    .catch((error) => {
+                                        this.hideLoadingOverlay();
+                                        this.showErrorModal(error);
+                                    });
                             }
                         });
                         entryDiv.appendChild(deleteBtn);
@@ -359,7 +440,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
             totalsDiv.innerHTML = `<span class="pd-total-imputado">⏳ Imputado: <strong>${hT}h ${String(mT).padStart(2,'0')}m</strong></span><span class="pd-total-jornada">Jornada: ${hW}h ${String(mW).padStart(2,'0')}m</span>${missingHtml}`;
 
             // =====================================================================
-            // ENVÍO DE FORMULARIO - CHANGE STATE POR WEBAPI
+            // ENVÍO DE FORMULARIO - CHANGE STATE POR WEBAPI Y ACTUALIZACIÓN
             // =====================================================================
             if (!this._isReadOnly && missingMins <= 0) {
                 const sendBtn = document.createElement("button");
@@ -368,7 +449,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                 sendBtn.onclick = () => {
                     if (confirm("¿Estás seguro de enviar el parte? Al hacerlo se bloqueará y ya no podrás modificar las horas.")) {
                         
-                        const ctxPage = this._context as unknown as { mode?: { contextInfo?: { entityId?: string, entityTypeName?: string } }, page?: { entityId?: string, entityTypeName?: string, data?: { save?: () => Promise<void>, refresh?: () => void } } };
+                        const ctxPage = this._context as unknown as IInternalContext;
                         const recordId = ctxPage.page?.entityId || ctxPage.mode?.contextInfo?.entityId;
                         const logicalName = ctxPage.page?.entityTypeName || ctxPage.mode?.contextInfo?.entityTypeName;
 
@@ -378,35 +459,54 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                             const processChangeState = async () => {
                                 try {
                                     // 1. Guardar formulario para afianzar cualquier cambio manual reciente
-                                    if (ctxPage.page?.data && typeof ctxPage.page.data.save === 'function') {
+                                    if (xrm && xrm.Page && xrm.Page.data && typeof xrm.Page.data.save === 'function') {
+                                        await new Promise<void>((resolve, reject) => {
+                                            xrm.Page!.data!.save!()
+                                                .then(() => {
+                                                    resolve();
+                                                    return null;
+                                                })
+                                                .catch((err: unknown) => {
+                                                    reject(err);
+                                                    return null;
+                                                });
+                                        });
+                                    } else if (ctxPage.page?.data && typeof ctxPage.page.data.save === 'function') {
                                         await ctxPage.page.data.save();
                                     }
 
-                                    // 2. Modificar el Estado (statecode Activo, statuscode Enviado)
+                                    // 2. Modificar el Estado (statecode Activo, statuscode Enviado) vía WebAPI
                                     const payload = {
                                         "statecode": this.STATE_ACTIVO,
                                         "statuscode": this.STATUS_ENVIADO
                                     };
                                     await this._context.webAPI.updateRecord(logicalName, recordId, payload);
 
-                                    // 3. Refrescar la pantalla
-                                    if (ctxPage.page?.data && typeof ctxPage.page.data.refresh === 'function') {
+                                    // 3. Refrescar la pantalla robustamente
+                                    if (xrm && xrm.Page && xrm.Page.data && typeof xrm.Page.data.refresh === 'function') {
+                                        xrm.Page.data.refresh();
+                                    } else if (ctxPage.page?.data && typeof ctxPage.page.data.refresh === 'function') {
                                         ctxPage.page.data.refresh();
                                     }
 
-                                    // 4. Bloquear el componente localmente
+                                    // 4. Bloquear el componente localmente y notificar al form
                                     this._pendingStatusCode = this.STATUS_ENVIADO;
                                     this._isReadOnly = true;
-                                    this.renderTimeline();
+                                    
+                                    this._notifyOutputChanged(); 
+                                    await this.renderTimeline();
                                     
                                 } catch (error: unknown) {
                                     this.hideLoadingOverlay();
                                     this.showErrorModal(error);
-                                    this.renderTimeline();
+                                    
+                                    this._pendingStatusCode = null;
+                                    this._isReadOnly = false;
+                                    await this.renderTimeline();
                                 }
                             };
 
-                            processChangeState();
+                            void processChangeState();
                         } else {
                             alert("⚠️ Error: No se ha podido obtener el identificador (ID) del Parte Diario para ejecutar el Cambio de Estado. Asegúrese de que el registro está creado y guardado.");
                         }
@@ -493,7 +593,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         const saveBtn = document.createElement("button");
         saveBtn.className = "pd-btn pd-btn-primary";
         saveBtn.innerText = "Guardar";
-        saveBtn.onclick = async () => {
+        saveBtn.onclick = () => {
             saveBtn.disabled = true;
             saveBtn.innerText = "Guardando...";
             const timeVal = inputTime.value; 
@@ -530,16 +630,18 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                         "msdyn_bookableresource@odata.bind": `/bookableresources(${recursoId})`
                     };
 
-                    try {
-                        await this._context.webAPI.createRecord("msdyn_timeentry", payload);
-                        if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
-                        this.showLoadingOverlay();
-                        await this.renderTimeline();
-                    } catch (e) {
-                        saveBtn.disabled = false;
-                        saveBtn.innerText = "Guardar";
-                        this.showErrorModal(e);
-                    }
+                    this._context.webAPI.createRecord("msdyn_timeentry", payload)
+                        .then(() => {
+                            if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+                            this.showLoadingOverlay();
+                            void this.renderTimeline();
+                            return null;
+                        })
+                        .catch((e: unknown) => {
+                            saveBtn.disabled = false;
+                            saveBtn.innerText = "Guardar";
+                            this.showErrorModal(e);
+                        });
                 }
             }
         };
