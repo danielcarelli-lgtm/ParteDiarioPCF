@@ -5,6 +5,7 @@ interface ITimeEntry extends ComponentFramework.WebApi.Entity {
     msdyn_start?: string;
     msdyn_end?: string;
     msdyn_type?: number;
+    msdyn_description?: string;
     "_msdyn_workorder_value"?: string;
     "msdyn_type@OData.Community.Display.V1.FormattedValue"?: string;
     "_msdyn_workorder_value@OData.Community.Display.V1.FormattedValue"?: string;
@@ -54,7 +55,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
     private _container: HTMLDivElement;
     private _context: ComponentFramework.Context<IInputs>;
     private _notifyOutputChanged: () => void;
-    private _version = "v1.0.50";
+    private _version = "v1.0.52";
     private _palette = ["#0078d4", "#107c10", "#d83b01", "#5c2d91", "#008272", "#a80000", "#e3008c", "#ff8c00"];
 
     private _timelineEl: HTMLDivElement;
@@ -110,7 +111,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         const finRaw = params.sec_horafin?.raw;
         const recursoRaw = params.sec_recursoid?.raw;
 
-        // 1. Extraer el estado primario de los parámetros de PCF
         let estadoRaw: number | null = null;
         if (params.sec_estadoparte && params.sec_estadoparte.raw !== null && params.sec_estadoparte.raw !== undefined) {
             estadoRaw = Number(params.sec_estadoparte.raw);
@@ -119,10 +119,8 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         const globalWindow = window as unknown as { Xrm?: IXrm };
         const xrm = globalWindow.Xrm;
 
-        // 2. FALLBACK CRÍTICO: Si PCF devuelve null (común en OnLoad si el campo está de solo lectura/bloqueado)
         if (estadoRaw === null || isNaN(estadoRaw)) {
             if (xrm && xrm.Page && typeof xrm.Page.getAttribute === 'function') {
-                // Obtenemos el nombre lógico del campo vinculado de forma segura
                 const fieldObj = params.sec_estadoparte as unknown as Record<string, unknown>;
                 const attributes = fieldObj.attributes as Record<string, string> | undefined;
                 const logicalName = (attributes && attributes.LogicalName) ? attributes.LogicalName : "statuscode";
@@ -137,21 +135,17 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
             }
         }
         
-        // 3. Determinar el Estado Final (Prioriza el local enviado si existe)
         const estadoActual = this._pendingStatusCode !== null ? this._pendingStatusCode : 
                             (estadoRaw !== null && !isNaN(estadoRaw) ? estadoRaw : this.STATUS_BORRADOR);
         
-        // 4. Determinar si el control entero debe deshabilitarse
         let isFormDisabled = this._context.mode.isControlDisabled;
         if (xrm && xrm.Page && xrm.Page.ui && typeof xrm.Page.ui.getFormType === 'function') {
             const formType = xrm.Page.ui.getFormType();
-            // 3: Read Only, 4: Disabled (El formulario nativo está bloqueado)
             if (formType === 3 || formType === 4) { 
                 isFormDisabled = true;
             }
         }
 
-        // 5. Bloquear si el componente está deshabilitado a nivel general O si el estado específico es Enviado/Aprobado
         this._isReadOnly = isFormDisabled || (estadoActual === this.STATUS_ENVIADO || estadoActual === this.STATUS_APROBADO);
 
         let recursoId = "";
@@ -347,20 +341,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                     const startPercent = ((startDec - this._minViewHour) / range) * 100;
                     const sizePercent = ((endDec - startDec) / range) * 100;
 
-                    if (this._isVertical) {
-                        entryDiv.style.top = `${startPercent}%`;
-                        entryDiv.style.height = `${sizePercent}%`;
-                        entryDiv.style.width = `100%`;
-                        const innerTime = document.createElement("div");
-                        innerTime.className = "pd-entry-inner-time";
-                        innerTime.innerText = `${this.formatTimeObj(startEntry)}-${this.formatTimeObj(endEntry)}`;
-                        entryDiv.appendChild(innerTime);
-                    } else {
-                        entryDiv.style.left = `${startPercent}%`;
-                        entryDiv.style.width = `${sizePercent}%`;
-                        entryDiv.classList.add("pd-entry-horizontal");
-                    }
-                    
                     entryDiv.style.backgroundColor = entryColor;
                     entryDiv.dataset.id = entry.msdyn_timeentryid;
                     entryDiv.dataset.startDec = startDec.toString();
@@ -369,10 +349,61 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                     entryDiv.dataset.origEnd = entry.msdyn_end;
 
                     const otName = entry["_msdyn_workorder_value@OData.Community.Display.V1.FormattedValue"] || "N/A";
-                    const badge = document.createElement("div");
-                    badge.className = "pd-entry-badge";
-                    badge.innerText = `OT:${otName}`;
-                    entryDiv.appendChild(badge);
+                    const desc = entry.msdyn_description;
+                    let detailText = `OT: ${otName}`;
+                    if (desc && desc.trim() !== "") {
+                        detailText += ` - ${desc}`;
+                    }
+                    const timeText = `${this.formatTimeObj(startEntry)} - ${this.formatTimeObj(endEntry)}`;
+
+                    if (this._isVertical) {
+                        entryDiv.style.top = `${startPercent}%`;
+                        entryDiv.style.height = `${sizePercent}%`;
+                        entryDiv.style.width = `100%`;
+
+                        // Contenedor flex envolvente (texto integrado a continuación)
+                        const innerContainer = document.createElement("div");
+                        innerContainer.className = "pd-entry-inner-time";
+                        innerContainer.style.display = "flex";
+                        innerContainer.style.flexDirection = "row";
+                        innerContainer.style.flexWrap = "wrap";
+                        innerContainer.style.justifyContent = "center";
+                        innerContainer.style.alignItems = "center";
+                        innerContainer.style.gap = "6px";
+                        innerContainer.style.padding = "2px 4px";
+                        innerContainer.style.overflow = "hidden";
+                        innerContainer.style.height = "100%";
+                        innerContainer.style.pointerEvents = "none";
+                        innerContainer.style.color = "white"; // Aseguramos color blanco centrado
+                        
+                        const timeSpan = document.createElement("span");
+                        timeSpan.innerText = timeText;
+                        timeSpan.style.fontWeight = "bold";
+
+                        const detailSpan = document.createElement("span");
+                        detailSpan.innerText = detailText;
+                        detailSpan.style.fontSize = "0.8em";
+                        detailSpan.style.opacity = "0.9";
+                        detailSpan.style.whiteSpace = "nowrap";
+                        detailSpan.style.overflow = "hidden";
+                        detailSpan.style.textOverflow = "ellipsis";
+
+                        innerContainer.appendChild(timeSpan);
+                        innerContainer.appendChild(detailSpan);
+                        entryDiv.appendChild(innerContainer);
+
+                    } else {
+                        entryDiv.style.left = `${startPercent}%`;
+                        entryDiv.style.width = `${sizePercent}%`;
+                        entryDiv.classList.add("pd-entry-horizontal");
+                        
+                        // Badge flotante superior (solo para la vista horizontal) para que no tape los bloques
+                        const badge = document.createElement("div");
+                        badge.className = "pd-entry-badge";
+                        badge.innerText = timeText; // Solo las horas en la versión flotante
+                        badge.title = `${timeText}\n${detailText}`; // Todo el texto por si pasan el ratón por encima
+                        entryDiv.appendChild(badge);
+                    }
 
                     if (entry.msdyn_type === 192355000 && !this._isReadOnly) {
                         const deleteBtn = document.createElement("div");
@@ -439,9 +470,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
 
             totalsDiv.innerHTML = `<span class="pd-total-imputado">⏳ Imputado: <strong>${hT}h ${String(mT).padStart(2,'0')}m</strong></span><span class="pd-total-jornada">Jornada: ${hW}h ${String(mW).padStart(2,'0')}m</span>${missingHtml}`;
 
-            // =====================================================================
-            // ENVÍO DE FORMULARIO - CHANGE STATE POR WEBAPI Y ACTUALIZACIÓN
-            // =====================================================================
             if (!this._isReadOnly && missingMins <= 0) {
                 const sendBtn = document.createElement("button");
                 sendBtn.className = "pd-btn pd-btn-success";
@@ -458,7 +486,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                             
                             const processChangeState = async () => {
                                 try {
-                                    // 1. Guardar formulario para afianzar cualquier cambio manual reciente
                                     if (xrm && xrm.Page && xrm.Page.data && typeof xrm.Page.data.save === 'function') {
                                         await new Promise<void>((resolve, reject) => {
                                             xrm.Page!.data!.save!()
@@ -475,21 +502,18 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                                         await ctxPage.page.data.save();
                                     }
 
-                                    // 2. Modificar el Estado (statecode Activo, statuscode Enviado) vía WebAPI
                                     const payload = {
                                         "statecode": this.STATE_ACTIVO,
                                         "statuscode": this.STATUS_ENVIADO
                                     };
                                     await this._context.webAPI.updateRecord(logicalName, recordId, payload);
 
-                                    // 3. Refrescar la pantalla robustamente
                                     if (xrm && xrm.Page && xrm.Page.data && typeof xrm.Page.data.refresh === 'function') {
                                         xrm.Page.data.refresh();
                                     } else if (ctxPage.page?.data && typeof ctxPage.page.data.refresh === 'function') {
                                         ctxPage.page.data.refresh();
                                     }
 
-                                    // 4. Bloquear el componente localmente y notificar al form
                                     this._pendingStatusCode = this.STATUS_ENVIADO;
                                     this._isReadOnly = true;
                                     
@@ -515,6 +539,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                 actionsDiv.appendChild(sendBtn);
             }
 
+            // Llamamos a la función para organizar las etiquetas flotantes (solo se aplica en horizontal)
             this.arrangeEntryBadges();
 
             if (typeColorMap.size > 0) {
@@ -895,7 +920,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
             this._dragTarget.style.top = `${startPercent}%`;
             this._dragTarget.style.height = `${sizePercent}%`;
             const inner = this._dragTarget.querySelector('.pd-entry-inner-time') as HTMLElement;
-            if(inner) inner.innerText = `${this.formatDecimalTime(this._dragData.newStart)}-${this.formatDecimalTime(this._dragData.newEnd)}`;
+            if(inner) inner.innerText = `${this.formatDecimalTime(this._dragData.newStart)} - ${this.formatDecimalTime(this._dragData.newEnd)}`;
         } else {
             this._dragTarget.style.left = `${startPercent}%`;
             this._dragTarget.style.width = `${sizePercent}%`;
@@ -971,29 +996,19 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         const m = String(fecha.getMonth() + 1).padStart(2, '0');
         const d = String(fecha.getDate()).padStart(2, '0');
         const filter = `_msdyn_bookableresource_value eq ${recursoId} and msdyn_start ge ${y}-${m}-${d}T00:00:00Z and msdyn_start le ${y}-${m}-${d}T23:59:59Z`;
-        const query = `?$filter=${filter}&$select=msdyn_timeentryid,msdyn_start,msdyn_end,msdyn_type,_msdyn_workorder_value`;
+        const query = `?$filter=${filter}&$select=msdyn_timeentryid,msdyn_start,msdyn_end,msdyn_type,_msdyn_workorder_value,msdyn_description`;
         const res = await context.webAPI.retrieveMultipleRecords("msdyn_timeentry", query);
         return res.entities as ITimeEntry[];
     }
 
+    // Lógica para que las horas flotantes de la vista horizontal no tapen el bloque de color 
+    // y tampoco se pisen unas a otras si hay muchas entradas pequeñas muy juntas.
     private arrangeEntryBadges(): void {
         if (!this._timelineEl) return;
         const badges = Array.from(this._timelineEl.querySelectorAll<HTMLDivElement>(".pd-entry-badge"));
         if (this._isVertical) {
-            const columns: { top: number; bottom: number }[][] = [];
-            badges.forEach((badge) => {
-                const entry = badge.parentElement as HTMLElement;
-                const bTop = entry.offsetTop;
-                const bBottom = bTop + entry.offsetHeight;
-                let col = 0;
-                while (col < columns.length) {
-                    if (!columns[col].some(p => !(bBottom <= p.top || bTop >= p.bottom))) break;
-                    col++;
-                }
-                if (col === columns.length) columns.push([]);
-                columns[col].push({ top: bTop, bottom: bBottom });
-                badge.style.marginLeft = `${col * 110 + 6}px`;
-            });
+            // En modo vertical ya no hay elementos con la clase "pd-entry-badge"
+            return;
         } else {
             const rows: { left: number; right: number }[][] = [];
             badges.forEach((badge) => {
@@ -1007,7 +1022,8 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                 }
                 if (row === rows.length) rows.push([]);
                 rows[row].push({ left: bLeft, right: bRight });
-                badge.style.top = `${-24 - (row * 18)}px`;
+                // El badge se posiciona "flotando" fuera y por encima del bloque usando márgenes negativos
+                badge.style.top = `${-24 - (row * 18)}px`; 
             });
         }
     }
