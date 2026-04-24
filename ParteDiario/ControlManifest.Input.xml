@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <manifest>
-  <control namespace="sec" constructor="ParteDiario" version="1.0.52" display-name-key="ParteDiario" description-key="Visualizador de horas imputadas del parte diario" control-type="standard" >
+  <control namespace="sec" constructor="ParteDiario" version="1.0.57" display-name-key="ParteDiario" description-key="Visualizador de horas imputadas del parte diario" control-type="standard" >
     
     <type-group name="AnyType">
       <type>SingleLine.Text</type>

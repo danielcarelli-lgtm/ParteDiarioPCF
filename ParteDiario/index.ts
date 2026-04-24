@@ -55,8 +55,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
     private _container: HTMLDivElement;
     private _context: ComponentFramework.Context<IInputs>;
     private _notifyOutputChanged: () => void;
-    private _version = "v1.0.52";
-    private _palette = ["#0078d4", "#107c10", "#d83b01", "#5c2d91", "#008272", "#a80000", "#e3008c", "#ff8c00"];
+    private _version = "v1.0.57"; // Versión incrementada
 
     private _timelineEl: HTMLDivElement;
     private _liveTooltip: HTMLDivElement;
@@ -151,8 +150,9 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         let recursoId = "";
         if (Array.isArray(recursoRaw) && recursoRaw.length > 0) recursoId = recursoRaw[0].id;
 
-        const inicioDecimal = this.getTimeDecFromDate(inicioRaw as Date);
-        const finDecimal = this.getTimeDecFromDate(finRaw as Date);
+        // Utilizamos UTC para los límites de la jornada
+        const inicioDecimal = this.getTimeDecFromDateUTC(inicioRaw as Date);
+        const finDecimal = this.getTimeDecFromDateUTC(finRaw as Date);
 
         if (this._isZoomed && inicioRaw && finRaw) {
             this._minViewHour = Math.max(0, inicioDecimal - 0.5);
@@ -298,7 +298,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
             }
 
             const typeColorMap = new Map<string, string>();
-            let colorIndex = 0;
             let totalMinsLogged = 0;
 
             entries.forEach((entry: ITimeEntry) => {
@@ -306,6 +305,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                     const startEntry = new Date(entry.msdyn_start);
                     const endEntry = new Date(entry.msdyn_end);
                     
+                    // Las entradas de tiempo utilizan el horario local
                     const startDec = this.getTimeDecFromDate(startEntry);
                     const endDec = this.getTimeDecFromDate(endEntry);
 
@@ -315,11 +315,29 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                     const isOutOfHours = (startDec < inicioDecimal - 0.01) || (endDec > finDecimal + 0.01);
                     const typeName = entry["msdyn_type@OData.Community.Display.V1.FormattedValue"] || "General";
 
-                    let entryColor = typeColorMap.get(typeName);
-                    if (!entryColor) {
-                        entryColor = this._palette[colorIndex % this._palette.length];
+                    let entryColor = "#42638C"; 
+                    let iconStr = ""; 
+                    const nameLower = typeName.toLowerCase();
+                    const descLower = (entry.msdyn_description || "").toLowerCase();
+                    
+                    if (nameLower.includes("viaje")) {
+                        entryColor = "#7fba00"; 
+                        iconStr = "🚗";
+                    } else if (nameLower.includes("descanso") || nameLower.includes("almuerzo")) {
+                        entryColor = "#AA1834"; 
+                        iconStr = descLower.includes("almuerzo") || nameLower.includes("almuerzo") ? "🍔" : "☕";
+                    } else if (nameLower.includes("vacacion") || nameLower.includes("ausencia") || nameLower.includes("vacaciones")) {
+                        entryColor = "#641432"; 
+                        iconStr = "🌴";
+                    } else if (nameLower.includes("extra")) {
+                        entryColor = "#031F30"; 
+                    } else if (nameLower.includes("trabajo")) {
+                        entryColor = "#42638C"; 
+                        iconStr = "🛠️";
+                    }
+
+                    if (!typeColorMap.has(typeName)) {
                         typeColorMap.set(typeName, entryColor);
-                        colorIndex++;
                     }
 
                     const entryDiv = document.createElement("div");
@@ -361,7 +379,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                         entryDiv.style.height = `${sizePercent}%`;
                         entryDiv.style.width = `100%`;
 
-                        // Contenedor flex envolvente (texto integrado a continuación)
                         const innerContainer = document.createElement("div");
                         innerContainer.className = "pd-entry-inner-time";
                         innerContainer.style.display = "flex";
@@ -374,7 +391,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                         innerContainer.style.overflow = "hidden";
                         innerContainer.style.height = "100%";
                         innerContainer.style.pointerEvents = "none";
-                        innerContainer.style.color = "white"; // Aseguramos color blanco centrado
+                        innerContainer.style.color = "white"; 
                         
                         const timeSpan = document.createElement("span");
                         timeSpan.innerText = timeText;
@@ -382,7 +399,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
 
                         const detailSpan = document.createElement("span");
                         detailSpan.innerText = detailText;
-                        detailSpan.style.fontSize = "0.8em";
                         detailSpan.style.opacity = "0.9";
                         detailSpan.style.whiteSpace = "nowrap";
                         detailSpan.style.overflow = "hidden";
@@ -390,6 +406,19 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
 
                         innerContainer.appendChild(timeSpan);
                         innerContainer.appendChild(detailSpan);
+                        
+                        // Añadir icono si la duración es >= a media hora
+                        if (iconStr !== "" && (endDec - startDec) >= 0.49) {
+                            const iconSpan = document.createElement("div");
+                            iconSpan.innerText = iconStr;
+                            iconSpan.style.position = "absolute";
+                            iconSpan.style.left = "5px"; // Cambiado a la izquierda
+                            iconSpan.style.top = "5px";
+                            iconSpan.style.fontSize = "12px";
+                            entryDiv.appendChild(iconSpan);
+                            innerContainer.style.paddingLeft = "15px"; // Ajuste para que el texto no pise el icono
+                        }
+
                         entryDiv.appendChild(innerContainer);
 
                     } else {
@@ -397,11 +426,15 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                         entryDiv.style.width = `${sizePercent}%`;
                         entryDiv.classList.add("pd-entry-horizontal");
                         
-                        // Badge flotante superior (solo para la vista horizontal) para que no tape los bloques
                         const badge = document.createElement("div");
                         badge.className = "pd-entry-badge";
-                        badge.innerText = timeText; // Solo las horas en la versión flotante
-                        badge.title = `${timeText}\n${detailText}`; // Todo el texto por si pasan el ratón por encima
+                        badge.innerText = timeText; 
+                        
+                        if (iconStr !== "" && (endDec - startDec) >= 0.49) {
+                            badge.innerText = iconStr + " " + timeText; // Aquí ya se pone a la izquierda del texto automáticamente
+                        }
+                        
+                        badge.title = `${timeText}\n${detailText}`; 
                         entryDiv.appendChild(badge);
                     }
 
@@ -539,7 +572,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                 actionsDiv.appendChild(sendBtn);
             }
 
-            // Llamamos a la función para organizar las etiquetas flotantes (solo se aplica en horizontal)
             this.arrangeEntryBadges();
 
             if (typeColorMap.size > 0) {
@@ -707,8 +739,9 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
             if (Array.isArray(recursoRaw) && recursoRaw.length > 0) recursoId = recursoRaw[0].id;
             recursoId = recursoId.replace(/[{}]/g, "").toLowerCase();
 
-            const inicioDec = this.getTimeDecFromDate(inicioRaw as Date);
-            const finDec = this.getTimeDecFromDate(finRaw as Date);
+            // Usamos UTC para calcular los límites y rellenar los huecos exactos
+            const inicioDec = this.getTimeDecFromDateUTC(inicioRaw as Date);
+            const finDec = this.getTimeDecFromDateUTC(finRaw as Date);
 
             const entries = await this.fetchTimeEntries(this._context, fechaRaw as Date, recursoId);
             
@@ -968,7 +1001,14 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         this._liveTooltip.style.top = `${y}px`;
     }
 
+    // Usado para las entradas de tiempo (Hora local)
     private getTimeDecFromDate(d: Date | undefined): number {
+        if (!d) return 0;
+        return d.getHours() + (d.getMinutes() / 60);
+    }
+
+    // Usado para los límites de la jornada (Mantiene la lógica anterior de UTC)
+    private getTimeDecFromDateUTC(d: Date | undefined): number {
         if (!d) return 0;
         return d.getUTCHours() + (d.getUTCMinutes() / 60);
     }
@@ -977,7 +1017,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         const d = new Date(origIsoString);
         const h = Math.floor(decimalHours);
         const m = Math.round((decimalHours - h) * 60);
-        d.setUTCHours(h, m, 0, 0);
+        d.setHours(h, m, 0, 0);
         return d.toISOString();
     }
 
@@ -988,7 +1028,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
     }
 
     private formatTimeObj(date: Date): string {
-        return `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}`;
+        return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
     }
 
     private async fetchTimeEntries(context: ComponentFramework.Context<IInputs>, fecha: Date, recursoId: string): Promise<ITimeEntry[]> {
@@ -1001,13 +1041,10 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         return res.entities as ITimeEntry[];
     }
 
-    // Lógica para que las horas flotantes de la vista horizontal no tapen el bloque de color 
-    // y tampoco se pisen unas a otras si hay muchas entradas pequeñas muy juntas.
     private arrangeEntryBadges(): void {
         if (!this._timelineEl) return;
         const badges = Array.from(this._timelineEl.querySelectorAll<HTMLDivElement>(".pd-entry-badge"));
         if (this._isVertical) {
-            // En modo vertical ya no hay elementos con la clase "pd-entry-badge"
             return;
         } else {
             const rows: { left: number; right: number }[][] = [];
@@ -1022,7 +1059,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                 }
                 if (row === rows.length) rows.push([]);
                 rows[row].push({ left: bLeft, right: bRight });
-                // El badge se posiciona "flotando" fuera y por encima del bloque usando márgenes negativos
                 badge.style.top = `${-24 - (row * 18)}px`; 
             });
         }
