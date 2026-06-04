@@ -55,7 +55,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
     private _container: HTMLDivElement;
     private _context: ComponentFramework.Context<IInputs>;
     private _notifyOutputChanged: () => void;
-    private _version = "v1.0.58"; // Versión incrementada
+    private _version = "v1.0.59"; // Versión incrementada
 
     private _timelineEl: HTMLDivElement;
     private _liveTooltip: HTMLDivElement;
@@ -150,7 +150,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         let recursoId = "";
         if (Array.isArray(recursoRaw) && recursoRaw.length > 0) recursoId = recursoRaw[0].id;
 
-        // Utilizamos UTC para los límites de la jornada
         const inicioDecimal = this.getTimeDecFromDateUTC(inicioRaw as Date);
         const finDecimal = this.getTimeDecFromDateUTC(finRaw as Date);
 
@@ -311,7 +310,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                     const startEntry = new Date(entry.msdyn_start);
                     const endEntry = new Date(entry.msdyn_end);
                     
-                    // Las entradas de tiempo utilizan el horario local
                     const startDec = this.getTimeDecFromDate(startEntry);
                     const endDec = this.getTimeDecFromDate(endEntry);
 
@@ -323,10 +321,15 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
 
                     let entryColor = "#42638C"; 
                     let iconStr = ""; 
+                    let isVacaciones = false;
+
                     const nameLower = typeName.toLowerCase();
                     const descLower = (entry.msdyn_description || "").toLowerCase();
                     
-                    if (nameLower.includes("viaje")) {
+                    if (nameLower.includes("aprovisionamiento") || descLower.includes("aprovisionamiento")) {
+                        entryColor = "#E27200"; 
+                        iconStr = "📦";
+                    } else if (nameLower.includes("viaje")) {
                         entryColor = "#7fba00"; 
                         iconStr = "🚗";
                     } else if (nameLower.includes("descanso") || nameLower.includes("almuerzo")) {
@@ -335,6 +338,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                     } else if (nameLower.includes("vacacion") || nameLower.includes("ausencia") || nameLower.includes("vacaciones")) {
                         entryColor = "#641432"; 
                         iconStr = "🌴";
+                        isVacaciones = true;
                     } else if (nameLower.includes("extra")) {
                         entryColor = "#031F30"; 
                     } else if (nameLower.includes("trabajo")) {
@@ -413,16 +417,15 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                         innerContainer.appendChild(timeSpan);
                         innerContainer.appendChild(detailSpan);
                         
-                        // Añadir icono si la duración es >= a media hora
                         if (iconStr !== "" && (endDec - startDec) >= 0.49) {
                             const iconSpan = document.createElement("div");
                             iconSpan.innerText = iconStr;
                             iconSpan.style.position = "absolute";
-                            iconSpan.style.left = "5px"; // Cambiado a la izquierda
+                            iconSpan.style.left = "5px";
                             iconSpan.style.top = "5px";
                             iconSpan.style.fontSize = "12px";
                             entryDiv.appendChild(iconSpan);
-                            innerContainer.style.paddingLeft = "15px"; // Ajuste para que el texto no pise el icono
+                            innerContainer.style.paddingLeft = "15px"; 
                         }
 
                         entryDiv.appendChild(innerContainer);
@@ -437,21 +440,23 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                         badge.innerText = timeText; 
                         
                         if (iconStr !== "" && (endDec - startDec) >= 0.49) {
-                            badge.innerText = iconStr + " " + timeText; // Aquí ya se pone a la izquierda del texto automáticamente
+                            badge.innerText = iconStr + " " + timeText; 
                         }
                         
                         badge.title = `${timeText}\n${detailText}`; 
                         entryDiv.appendChild(badge);
                     }
 
-                    if (entry.msdyn_type === 192355000 && !this._isReadOnly) {
+                    const isReadOnlyEntry = this._isReadOnly || isVacaciones;
+
+                    if (entry.msdyn_type === 192355000 && !isReadOnlyEntry) {
                         const deleteBtn = document.createElement("div");
                         deleteBtn.className = "pd-delete-btn";
                         deleteBtn.innerHTML = "&times;";
                         deleteBtn.title = "Eliminar entrada";
                         deleteBtn.addEventListener("pointerdown", (ev) => {
                             ev.stopPropagation(); 
-                            if(confirm("¿Estás seguro de que quieres eliminar esta entrada de descanso?")) {
+                            if(confirm("¿Estás seguro de que quieres eliminar esta entrada?")) {
                                 this.showLoadingOverlay();
                                 this._context.webAPI.deleteRecord("msdyn_timeentry", entry.msdyn_timeentryid!)
                                     .then(() => {
@@ -467,7 +472,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                         entryDiv.appendChild(deleteBtn);
                     }
 
-                    if (!this._isReadOnly) {
+                    if (!isReadOnlyEntry) {
                         const editBtn = document.createElement("div");
                         editBtn.className = "pd-edit-btn";
                         editBtn.innerHTML = "✏️";
@@ -486,8 +491,19 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                         entryDiv.appendChild(resizerLeft);
                         entryDiv.appendChild(resizerRight);
                         entryDiv.addEventListener("pointerdown", this.onPointerDown.bind(this));
+                        
+                        // Nuevo evento Double Click para expandir huecos
+                        entryDiv.addEventListener("dblclick", (ev) => {
+                            ev.stopPropagation();
+                            void this.expandEntryToGaps(entry, startDec, endDec, inicioDecimal, finDecimal);
+                        });
+                        entryDiv.title = "Doble click para ajustar a los huecos libres";
+                        
                     } else {
                         entryDiv.style.cursor = "default"; 
+                        if (isVacaciones) {
+                            entryDiv.title = "Las vacaciones no se pueden modificar desde este panel.";
+                        }
                     }
 
                     this._timelineEl.appendChild(entryDiv);
@@ -1001,7 +1017,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
             if (Array.isArray(recursoRaw) && recursoRaw.length > 0) recursoId = recursoRaw[0].id;
             recursoId = recursoId.replace(/[{}]/g, "").toLowerCase();
 
-            // Usamos UTC para calcular los límites y rellenar los huecos exactos
             const inicioDec = this.getTimeDecFromDateUTC(inicioRaw as Date);
             const finDec = this.getTimeDecFromDateUTC(finRaw as Date);
 
@@ -1051,6 +1066,60 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
             this.hideLoadingOverlay();
             btn.disabled = false;
             btn.innerText = "Completar Huecos";
+            this.showErrorModal(error);
+        }
+    }
+
+    private async expandEntryToGaps(entry: ITimeEntry, currentStart: number, currentEnd: number, dayStart: number, dayEnd: number): Promise<void> {
+        let closestBefore = -Infinity;
+        let closestAfter = Infinity;
+
+        this._currentEntries.forEach(other => {
+            if (other.id === entry.msdyn_timeentryid) return;
+            
+            if (other.endDec <= currentStart + 0.01) {
+                closestBefore = Math.max(closestBefore, other.endDec);
+            }
+            if (other.startDec >= currentEnd - 0.01) {
+                closestAfter = Math.min(closestAfter, other.startDec);
+            }
+        });
+
+        if (closestBefore === -Infinity || closestBefore < dayStart) {
+            if (currentStart >= dayStart) {
+                closestBefore = Math.max(closestBefore, dayStart);
+            } else {
+                closestBefore = currentStart;
+            }
+        }
+
+        if (closestAfter === Infinity || closestAfter > dayEnd) {
+            if (currentEnd <= dayEnd) {
+                closestAfter = Math.min(closestAfter, dayEnd);
+            } else {
+                closestAfter = currentEnd;
+            }
+        }
+        
+        if (Math.abs(closestBefore - currentStart) < 0.01 && Math.abs(closestAfter - currentEnd) < 0.01) {
+            return; 
+        }
+
+        const durationMins = Math.round((closestAfter - closestBefore) * 60);
+        const origIsoStr = entry.msdyn_start!;
+        
+        const payload = {
+            "msdyn_start": this.applyTimeToDateStr(origIsoStr, closestBefore),
+            "msdyn_end": this.applyTimeToDateStr(origIsoStr, closestAfter),
+            "msdyn_duration": durationMins
+        };
+
+        this.showLoadingOverlay();
+        try {
+            await this._context.webAPI.updateRecord("msdyn_timeentry", entry.msdyn_timeentryid!, payload);
+            await this.renderTimeline();
+        } catch (error: unknown) {
+            this.hideLoadingOverlay();
             this.showErrorModal(error);
         }
     }
@@ -1263,13 +1332,11 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         this._liveTooltip.style.top = `${y}px`;
     }
 
-    // Usado para las entradas de tiempo (Hora local)
     private getTimeDecFromDate(d: Date | undefined): number {
         if (!d) return 0;
         return d.getHours() + (d.getMinutes() / 60);
     }
 
-    // Usado para los límites de la jornada (Mantiene la lógica anterior de UTC)
     private getTimeDecFromDateUTC(d: Date | undefined): number {
         if (!d) return 0;
         return d.getUTCHours() + (d.getUTCMinutes() / 60);
