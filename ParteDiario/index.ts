@@ -55,7 +55,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
     private _container: HTMLDivElement;
     private _context: ComponentFramework.Context<IInputs>;
     private _notifyOutputChanged: () => void;
-    private _version = "v1.0.57"; // Versión incrementada
+    private _version = "v1.0.58"; // Versión incrementada
 
     private _timelineEl: HTMLDivElement;
     private _liveTooltip: HTMLDivElement;
@@ -214,6 +214,12 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
             lunchBtn.innerText = "🍔 Crear Almuerzo";
             lunchBtn.onclick = () => this.showLunchModal();
             actionsDiv.appendChild(lunchBtn);
+
+            const aprovisionamientoBtn = document.createElement("button");
+            aprovisionamientoBtn.className = "pd-btn pd-btn-primary";
+            aprovisionamientoBtn.innerText = "📦 Crear Aprovisionamiento";
+            aprovisionamientoBtn.onclick = () => this.showAprovisionamientoModal();
+            actionsDiv.appendChild(aprovisionamientoBtn);
 
             const fillBtn = document.createElement("button");
             fillBtn.className = "pd-btn pd-btn-primary";
@@ -462,6 +468,16 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                     }
 
                     if (!this._isReadOnly) {
+                        const editBtn = document.createElement("div");
+                        editBtn.className = "pd-edit-btn";
+                        editBtn.innerHTML = "✏️";
+                        editBtn.title = "Editar entrada";
+                        editBtn.addEventListener("pointerdown", (ev) => {
+                            ev.stopPropagation(); 
+                            this.showEditModal(entry, startEntry, endDec - startDec);
+                        });
+                        entryDiv.appendChild(editBtn);
+
                         const resizerLeft = document.createElement("div");
                         resizerLeft.className = "pd-resizer pd-resizer-left";
                         const resizerRight = document.createElement("div");
@@ -603,6 +619,252 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
             console.error("Error WebAPI:", err);
             this.hideLoadingOverlay();
         }
+    }
+
+    private showAprovisionamientoModal(): void {
+        const backdrop = document.createElement("div");
+        backdrop.className = "pd-modal-backdrop";
+
+        const modal = document.createElement("div");
+        modal.className = "pd-modal";
+
+        const title = document.createElement("h3");
+        title.innerText = "📦 Registrar Aprovisionamiento";
+        modal.appendChild(title);
+
+        const lblTime = document.createElement("label");
+        lblTime.innerText = "Hora de Inicio (HH:MM):";
+        modal.appendChild(lblTime);
+
+        const inputTime = document.createElement("input");
+        inputTime.type = "time";
+        inputTime.value = "08:00"; 
+        inputTime.className = "pd-input";
+        modal.appendChild(inputTime);
+
+        const lblDur = document.createElement("label");
+        lblDur.innerText = "Duración:";
+        modal.appendChild(lblDur);
+
+        const selectDur = document.createElement("select");
+        selectDur.className = "pd-input";
+        const options = [ {v:15, l:"15 minutos"}, {v:30, l:"30 minutos"}, {v:45, l:"45 minutos"}, {v:60, l:"1 hora"}, {v:90, l:"1.5 horas"} ];
+        options.forEach(o => {
+            const opt = document.createElement("option");
+            opt.value = o.v.toString();
+            opt.innerText = o.l;
+            if(o.v === 30) opt.selected = true;
+            selectDur.appendChild(opt);
+        });
+        modal.appendChild(selectDur);
+
+        const btnDiv = document.createElement("div");
+        btnDiv.style.display = "flex";
+        btnDiv.style.gap = "10px";
+        btnDiv.style.marginTop = "15px";
+
+        const saveBtn = document.createElement("button");
+        saveBtn.className = "pd-btn pd-btn-primary";
+        saveBtn.innerText = "Guardar";
+        saveBtn.onclick = () => {
+            saveBtn.disabled = true;
+            saveBtn.innerText = "Guardando...";
+            const timeVal = inputTime.value; 
+            const durVal = parseInt(selectDur.value, 10);
+            
+            if(!timeVal) {
+                alert("Introduce una hora válida");
+                saveBtn.disabled = false;
+                saveBtn.innerText = "Guardar";
+                return;
+            }
+
+            const match = timeVal.match(/(\d{1,2}):(\d{2})/);
+            if(match) {
+                const h = parseInt(match[1], 10);
+                const m = parseInt(match[2], 10);
+                const hDec = h + (m/60);
+                const endDec = hDec + (durVal/60);
+
+                const params = this._context.parameters;
+                const fechaRaw = params.sec_fecha?.raw;
+                const recursoRaw = params.sec_recursoid?.raw;
+                
+                if (fechaRaw && recursoRaw && recursoRaw.length > 0) {
+                    const recursoId = recursoRaw[0].id.replace(/[{}]/g, "").toLowerCase();
+                    const baseDateStr = (fechaRaw as Date).toISOString();
+                    
+                    const payload = {
+                        "msdyn_start": this.applyTimeToDateStr(baseDateStr, hDec),
+                        "msdyn_end": this.applyTimeToDateStr(baseDateStr, endDec),
+                        "msdyn_duration": durVal,
+                        "msdyn_type": 192355000,
+                        "msdyn_description": "Aprovisionamiento",
+                        "msdyn_bookableresource@odata.bind": `/bookableresources(${recursoId})`
+                    };
+
+                    this._context.webAPI.createRecord("msdyn_timeentry", payload)
+                        .then(() => {
+                            if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+                            this.showLoadingOverlay();
+                            void this.renderTimeline();
+                            return null;
+                        })
+                        .catch((e: unknown) => {
+                            saveBtn.disabled = false;
+                            saveBtn.innerText = "Guardar";
+                            this.showErrorModal(e);
+                        });
+                }
+            }
+        };
+
+        const cancelBtn = document.createElement("button");
+        cancelBtn.className = "pd-btn pd-btn-secondary";
+        cancelBtn.innerText = "Cancelar";
+        cancelBtn.onclick = () => {
+            if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+        };
+
+        btnDiv.appendChild(saveBtn);
+        btnDiv.appendChild(cancelBtn);
+        modal.appendChild(btnDiv);
+
+        backdrop.appendChild(modal);
+        this._container.appendChild(backdrop);
+    }
+
+    private showEditModal(entry: ITimeEntry, startEntry: Date, durationDec: number): void {
+        const backdrop = document.createElement("div");
+        backdrop.className = "pd-modal-backdrop";
+
+        const modal = document.createElement("div");
+        modal.className = "pd-modal";
+
+        const title = document.createElement("h3");
+        title.innerText = "✏️ Editar Entrada";
+        modal.appendChild(title);
+
+        const lblDesc = document.createElement("label");
+        lblDesc.innerText = "Descripción:";
+        modal.appendChild(lblDesc);
+
+        const inputDesc = document.createElement("textarea");
+        inputDesc.className = "pd-modal-textarea";
+        inputDesc.value = entry.msdyn_description || "";
+        inputDesc.style.height = "60px";
+        modal.appendChild(inputDesc);
+
+        const lblTime = document.createElement("label");
+        lblTime.innerText = "Hora de Inicio (HH:MM):";
+        modal.appendChild(lblTime);
+
+        const inputTime = document.createElement("input");
+        inputTime.type = "time";
+        inputTime.value = this.formatTimeObj(startEntry);
+        inputTime.className = "pd-input";
+        modal.appendChild(inputTime);
+
+        const lblDur = document.createElement("label");
+        lblDur.innerText = "Duración:";
+        modal.appendChild(lblDur);
+
+        const selectDur = document.createElement("select");
+        selectDur.className = "pd-input";
+        
+        const currentDurMins = Math.round(durationDec * 60);
+        let found = false;
+        const options = [
+            {v:15, l:"15 minutos"}, {v:30, l:"30 minutos"}, {v:45, l:"45 minutos"}, 
+            {v:60, l:"1 hora"}, {v:90, l:"1.5 horas"}, {v:120, l:"2 horas"},
+            {v:180, l:"3 horas"}, {v:240, l:"4 horas"}, {v:300, l:"5 horas"},
+            {v:360, l:"6 horas"}, {v:420, l:"7 horas"}, {v:480, l:"8 horas"}
+        ];
+        
+        options.forEach(o => {
+            const opt = document.createElement("option");
+            opt.value = o.v.toString();
+            opt.innerText = o.l;
+            if (o.v === currentDurMins) { opt.selected = true; found = true; }
+            selectDur.appendChild(opt);
+        });
+
+        if (!found) {
+            const optCurrent = document.createElement("option");
+            optCurrent.value = currentDurMins.toString();
+            optCurrent.innerText = `${currentDurMins} minutos`;
+            optCurrent.selected = true;
+            selectDur.insertBefore(optCurrent, selectDur.firstChild);
+        }
+
+        modal.appendChild(selectDur);
+
+        const btnDiv = document.createElement("div");
+        btnDiv.style.display = "flex";
+        btnDiv.style.gap = "10px";
+        btnDiv.style.marginTop = "15px";
+
+        const saveBtn = document.createElement("button");
+        saveBtn.className = "pd-btn pd-btn-primary";
+        saveBtn.innerText = "Guardar";
+        saveBtn.onclick = () => {
+            saveBtn.disabled = true;
+            saveBtn.innerText = "Guardando...";
+            const timeVal = inputTime.value; 
+            const durVal = parseInt(selectDur.value, 10);
+            const descVal = inputDesc.value;
+            
+            if(!timeVal) {
+                alert("Introduce una hora válida");
+                saveBtn.disabled = false;
+                saveBtn.innerText = "Guardar";
+                return;
+            }
+
+            const match = timeVal.match(/(\d{1,2}):(\d{2})/);
+            if(match) {
+                const h = parseInt(match[1], 10);
+                const m = parseInt(match[2], 10);
+                const hDec = h + (m/60);
+                const endDec = hDec + (durVal/60);
+
+                const origIsoStr = entry.msdyn_start!;
+                
+                const payload = {
+                    "msdyn_start": this.applyTimeToDateStr(origIsoStr, hDec),
+                    "msdyn_end": this.applyTimeToDateStr(origIsoStr, endDec),
+                    "msdyn_duration": durVal,
+                    "msdyn_description": descVal
+                };
+
+                this._context.webAPI.updateRecord("msdyn_timeentry", entry.msdyn_timeentryid!, payload)
+                    .then(() => {
+                        if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+                        this.showLoadingOverlay();
+                        void this.renderTimeline();
+                        return null;
+                    })
+                    .catch((e: unknown) => {
+                        saveBtn.disabled = false;
+                        saveBtn.innerText = "Guardar";
+                        this.showErrorModal(e);
+                    });
+            }
+        };
+
+        const cancelBtn = document.createElement("button");
+        cancelBtn.className = "pd-btn pd-btn-secondary";
+        cancelBtn.innerText = "Cancelar";
+        cancelBtn.onclick = () => {
+            if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+        };
+
+        btnDiv.appendChild(saveBtn);
+        btnDiv.appendChild(cancelBtn);
+        modal.appendChild(btnDiv);
+
+        backdrop.appendChild(modal);
+        this._container.appendChild(backdrop);
     }
 
     private showLunchModal(): void {
@@ -863,7 +1125,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         if (this._isReadOnly) return;
 
         const target = e.target as HTMLElement;
-        if (target.classList.contains('pd-delete-btn')) return;
+        if (target.classList.contains('pd-delete-btn') || target.classList.contains('pd-edit-btn')) return;
 
         const entryDiv = target.closest('.pd-entry') as HTMLElement;
         if (!entryDiv) return;

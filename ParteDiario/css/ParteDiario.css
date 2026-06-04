@@ -159,6 +159,26 @@
 
 .pd-delete-btn:hover { background: rgba(168, 0, 0, 0.8); }
 
+.pd-edit-btn {
+    position: absolute;
+    right: 20px;
+    top: 2px;
+    width: 14px;
+    height: 14px;
+    background: rgba(0, 0, 0, 0.4);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    cursor: pointer;
+    z-index: 20;
+    transition: background 0.2s;
+}
+
+.pd-edit-btn:hover { background: rgba(0, 120, 212, 0.8); }
+
 .pd-jornada {
     position: absolute;
     background-color: rgba(0, 120, 212, 0.08);
@@ -187,8 +207,9 @@
 .pd-legend-color { width: 12px; height: 12px; border-radius: 2px; }
 
 .pd-live-tooltip { position: fixed; background: #333; color: #fff; padding: 6px 10px; border-radius: 4px; font-size: 14px; z-index: 10000; pointer-events: none; opacity: 0; transform: translate(-50%, -130%); }
+
 .pd-dragging { cursor: grabbing !important; opacity: 0.8; }
-.pd-dragging .pd-delete-btn { display: none; }
+.pd-dragging .pd-delete-btn, .pd-dragging .pd-edit-btn { display: none; }
 
 .pd-version-tag { text-align: right; font-size: 10px; color: #ccc; margin-top: 5px; }
 
