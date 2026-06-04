@@ -1,3 +1,4 @@
+Markdown
 # ParteDiarioPCF ⏱️
 
 Un componente de interfaz de usuario personalizado (PCF - Power Apps Component Framework) diseñado para Dynamics 365 y Power Platform. Este control transforma la gestión de horas (entidad `msdyn_timeentry`) ofreciendo una línea de tiempo visual e interactiva para los partes de trabajo diarios en el entorno de **Field Service**.
@@ -12,8 +13,67 @@ Un componente de interfaz de usuario personalizado (PCF - Power Apps Component F
 - **Cálculo en Tiempo Real:** Muestra el total de horas imputadas frente a las horas objetivo de la jornada, indicando el tiempo faltante o extra.
 
 ---
+# Manual de Uso - Panel Interactivo de Field Service ⏱️
 
-## 🛠️ Instalación y Despliegue
+Bienvenido al nuevo panel interactivo para la gestión del Parte Diario. Este componente sustituye la clásica cuadrícula de registros por una línea de tiempo visual, diseñada para agilizar y simplificar la imputación de horas de trabajo, descansos y aprovisionamientos.
+
+A continuación, se detalla el funcionamiento de cada elemento de la interfaz.
+
+---
+
+## 1. Panel de Métricas (Totales)
+Ubicado en la parte superior derecha de la pantalla, este panel te muestra el balance de tu día en tiempo real:
+- **⏳ Imputado:** Es la suma total de horas y minutos que ya tienes registrados en tu parte de hoy.
+- **Jornada:** Indica las horas totales que dura tu turno o jornada laboral teórica de ese día.
+- **Faltan / Extra:** El sistema calcula automáticamente la diferencia. Se mostrará en **rojo** si aún te faltan horas para completar la jornada, o en **verde** si has completado la jornada o tienes horas extras.
+
+---
+
+## 2. Botones de Acción (Barra Superior)
+En la parte superior encontrarás una barra de herramientas para realizar acciones rápidas:
+
+- **↔️ / ↕️ Vista:** Cambia la interfaz entre un formato de línea de tiempo vertical u horizontal, según lo que te resulte más cómodo.
+- **🔍 Zoom:** Permite cambiar la escala de visualización. Puedes ver las 24 horas del día completas o hacer "zoom" para encuadrar y centrarte únicamente en las horas de tu jornada laboral.
+- **🔄 Refrescar:** Recarga los datos para asegurar que estás viendo la última información guardada.
+- **🍔 Crear Almuerzo:** Abre una ventana rápida para registrar tu tiempo de comida. Por defecto sugiere las 14:00h y una duración de 1 hora (modificable).
+- **📦 Crear Aprovisionamiento:** Abre una ventana para registrar tareas de almacén, carga o descarga. Sugiere por defecto las 08:00h y 30 minutos de duración.
+- **Completar Huecos:** Examina tu línea de tiempo y crea automáticamente bloques de horas de trabajo en todos los espacios vacíos dentro de tu jornada. Úsalo para cuadrar tu día al 100% con un solo clic.
+- **🚀 Enviar Parte:** Una vez que tus horas cuadran y el parte está listo, pulsa este botón para enviarlo. 
+  > **⚠️ Atención:** Al enviar el parte, el estado cambiará a "Enviado" y el panel se bloqueará por completo (modo lectura), por lo que no podrás hacer más modificaciones.
+
+---
+
+## 3. Interacción con los Bloques de Tiempo (Slots)
+Cada franja de color en tu línea de tiempo representa un bloque de horas. Mientras el parte esté en estado "Borrador", puedes manipularlos fácilmente con el ratón:
+
+- **Mover (Drag & Drop):** Haz clic y mantén pulsado en el centro de un bloque para arrastrarlo a una nueva hora del día.
+- **Redimensionar:** Pasa el ratón por el borde superior o inferior de un bloque. Haz clic y arrastra para acortar o alargar la duración (el ajuste va de 5 en 5 minutos).
+- **Ajuste Inteligente (Doble Clic):** Si haces doble clic sobre un bloque existente, este se estirará automáticamente hacia arriba y hacia abajo para ocupar todo el tiempo libre disponible, deteniéndose justo donde empieza otro bloque o en el límite de tu jornada.
+- **✏️ Editar:** Haz clic en el pequeño icono de lápiz dentro del bloque. Se abrirá una ventana para ajustar manualmente la hora exacta, la duración y la descripción de esa tarea.
+- **❌ Eliminar:** Haz clic en la "X" del bloque para borrarlo permanentemente (el sistema te pedirá confirmación).
+
+---
+
+## 4. Leyenda Visual y Colores
+El panel utiliza un código de colores e iconos para que identifiques de un vistazo en qué has invertido tu tiempo:
+
+- 🛠️ **Trabajo (Azul):** Horas estándar de trabajo u órdenes de trabajo productivas.
+- 📦 **Aprovisionamiento (Naranja):** Tareas relacionadas con la gestión de almacén o carga de material.
+- 🚗 **Viaje (Verde):** Tiempos de desplazamiento entre ubicaciones.
+- 🍔 / ☕ **Descanso o Almuerzo (Rojo):** Tiempos de parada.
+- 🌴 **Vacaciones o Ausencias (Granate):** Días libres o permisos. 
+  > *Nota: Estos bloques están protegidos por el sistema y son de solo lectura. No se pueden modificar ni mover desde este panel.*
+- **Extra (Azul Oscuro):** Horas catalogadas oficialmente como extraordinarias.
+
+---
+
+## 5. Avisos Visuales Especiales
+El panel te avisa de posibles errores en la imputación mediante tramas especiales en los bloques:
+
+- **⚠️ Solapamiento (Fondo rojo a rayas):** Si dos bloques de tiempo se pisan en la misma hora, se pintarán con un fondo rayado rojo y un símbolo de advertencia. Debes corregir las horas para que no coincidan.
+- **Fuera de Horario (Fondo transparente a rayas):** Si registras un bloque de tiempo antes de tu hora de inicio oficial o después de tu hora de fin, aparecerá con un sombreado rayado para indicarte que está fuera del horario estándar establecido.
+---
+## 🛠️ Instalación y Despliegue (Perfil Técnico)
 
 ### Requisitos previos
 - [Node.js](https://nodejs.org/)
@@ -25,8 +85,11 @@ Un componente de interfaz de usuario personalizado (PCF - Power Apps Component F
 3. Instala las dependencias:
 ```bash
    npm install
+Compila el código para verificar que no hay errores (opcional):
 
-   Despliegue en Dataverse
+Bash
+   npm run build
+Despliegue en Dataverse
 Para publicar el componente directamente en el entorno de desarrollo:
 
 Bash
@@ -35,7 +98,8 @@ pac auth create --url https://<entorno>[.crm4.dynamics.com/](https://.crm4.dynam
 
 # 2. Empaquetar y subir el componente usando el prefijo del publicador (ej: sec)
 pac pcf push --publisher-prefix sec
-Configuración en el Formulario
+---
+###Configuración en el Formulario
 Al añadir este componente a un formulario en Power Apps, se deben mapear las siguientes propiedades (definidas en el Manifest):
 
 Campo Base / Estado (sec_estadoparte): Campo statuscode del parte diario.
@@ -47,65 +111,5 @@ Hora Inicio / Fin Jornada (sec_horainicio, sec_horafin): Límites de la jornada 
 Recurso (sec_recursoid): El Recurso Reservable (Bookable Resource) asociado.
 
 Orientación: Controla si inicia en vista Horizontal o Vertical.
-
-📖 Manual de Uso
-Este componente sustituye la clásica cuadrícula de registros por un panel interactivo. A continuación, se detalla el funcionamiento de cada elemento de la interfaz.
-
-1. Panel de Métricas (Totales)
-Ubicado en la parte superior derecha, muestra el balance de horas del día en tiempo real:
-
-⏳ Imputado: Suma total de horas y minutos registrados en el parte.
-
-Jornada: Las horas que dura el turno o jornada laboral de ese día.
-
-Faltan / Extra: Calcula automáticamente la diferencia, mostrándose en rojo si faltan horas para completar la jornada, o en verde si hay horas extras o la jornada está completa.
-
-2. Botones de Acción (Barra Superior)
-↔️/↕️ Vista: Alterna la interfaz entre un formato de línea de tiempo vertical u horizontal según la preferencia del usuario.
-
-🔍 Zoom: Permite cambiar la escala de visualización. Puedes ver las 24 horas del día completas o hacer "zoom" para encuadrar únicamente las horas de tu jornada laboral.
-
-🔄 Refrescar: Recarga los datos directamente de Dataverse por si ha habido cambios externos.
-
-🍔 Crear Almuerzo: Abre una ventana rápida para registrar un tiempo de comida. Por defecto sugiere las 14:00h y una duración de 1 hora, pero es modificable.
-
-📦 Crear Aprovisionamiento: Abre una ventana para registrar tareas de carga/descarga de almacén. Sugiere por defecto las 08:00h y 30 minutos de duración.
-
-Completar Huecos: Examina tu línea de tiempo y crea automáticamente bloques de horas en todos aquellos espacios vacíos dentro de tu jornada laboral para que el total cuadre al 100%.
-
-🚀 Enviar Parte: Una vez que las horas están completas, este botón permite enviar el parte para su revisión. Atención: Al pulsarlo, el estado del registro cambiará a "Enviado" y el componente se bloqueará, pasando a modo de solo lectura.
-
-3. Interacción con los Bloques de Tiempo (Slots)
-Cada franja de color representa un bloque de tiempo registrado. Si el parte está en borrador, puedes interactuar con ellos de las siguientes formas:
-
-Mover (Drag & Drop): Haz clic y mantén pulsado en el centro del bloque para arrastrarlo a una nueva hora.
-
-Redimensionar (Ajustar duración): Pasa el ratón por el borde superior/inferior (o izquierdo/derecho en modo horizontal) de un bloque. Haz clic y arrastra el borde para acortar o extender la duración del bloque en intervalos de 5 minutos.
-
-Doble Click (Expansión inteligente): Si haces doble click sobre un bloque, este se estirará automáticamente hacia arriba y hacia abajo para ocupar todo el tiempo libre disponible hasta chocar con el inicio/fin de jornada u otro bloque de tiempo existente.
-
-✏️ Editar: Cada bloque tiene un pequeño icono de lápiz. Al pulsarlo, se abre un modal que te permite ajustar la hora exacta de inicio, elegir la duración en un desplegable y modificar la descripción de la tarea.
-
-❌ Eliminar (x): Borra permanentemente el bloque de tiempo de la base de datos (pedirá confirmación previa).
-
-4. Leyenda Visual y Colores
-El componente utiliza un sistema de colores e iconos para identificar de un vistazo el tipo de tarea realizada:
-
-🛠️ Trabajo (Azul): Horas estándar de trabajo productivo.
-
-📦 Aprovisionamiento (Naranja): Tareas relacionadas con gestión de almacén o carga de material.
-
-🚗 Viaje (Verde): Tiempos de desplazamiento.
-
-🍔/☕ Descanso/Almuerzo (Rojo): Tiempos de parada.
-
-🌴 Vacaciones/Ausencia (Granate): Días libres o permisos. (Nota: Estos bloques están protegidos y son de solo lectura, no se pueden modificar ni mover desde este panel).
-
-Extra (Azul Oscuro): Horas catalogadas como extraordinarias.
-
-Avisos visuales especiales:
-⚠️ Solapamiento (Fondo rojo a rayas): Si dos bloques de tiempo comparten la misma hora (se pisan), se pintarán con un fondo rayado rojo y un icono de advertencia para indicar que debes corregir las horas.
-
-Fuera de Horario (Fondo transparente a rayas): Si un bloque se registra antes de la hora de inicio de jornada o después de la hora de fin, tendrá un sombreado rayado para indicar que está ocurriendo fuera del horario oficial.
 
 Desarrollado para operaciones de Field Service.
