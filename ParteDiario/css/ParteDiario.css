@@ -289,3 +289,9 @@
     border-radius: 4px;
     background-color: #f9f9f9;
 }
+
+.pd-ghost-entry {
+    pointer-events: none !important;
+    box-shadow: none !important;
+    z-index: 10 !important;
+}

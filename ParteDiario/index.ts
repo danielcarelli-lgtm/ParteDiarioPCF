@@ -44,7 +44,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
 
     // =========================================================================
     // CONFIGURACIÓN DE ESTADOS
-    // Todos estos statuscode pertenecen al statecode 0 (Activo)
     // =========================================================================
     private readonly STATE_ACTIVO = 0; 
     private readonly STATUS_BORRADOR = 1;  
@@ -55,12 +54,13 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
     private _container: HTMLDivElement;
     private _context: ComponentFramework.Context<IInputs>;
     private _notifyOutputChanged: () => void;
-    private _version = "v1.0.59"; // Versión incrementada
+    private _version = "v1.0.61"; // Versión incrementada
 
     private _timelineEl: HTMLDivElement;
     private _liveTooltip: HTMLDivElement;
     private _isVertical = false;
     private _isDragging = false;
+    private _isDrawing = false;
     private _isZoomed = false;
     private _minViewHour = 0;
     private _maxViewHour = 24;
@@ -73,6 +73,9 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
     private _dragType: 'move' | 'left' | 'right' | null = null;
     private _dragTarget: HTMLElement | null = null;
     private _dragData = { id: "", originalStart: 0, originalEnd: 0, offsetDecimal: 0, newStart: 0, newEnd: 0, origStartDate: "", origEndDate: "", minBound: 0, maxBound: 24 };
+
+    private _drawStartDec = 0;
+    private _drawGhost: HTMLDivElement | null = null;
 
     public init(context: ComponentFramework.Context<IInputs>, notifyOutputChanged: () => void, state: ComponentFramework.Dictionary, container: HTMLDivElement): void {
         this._context = context;
@@ -223,8 +226,16 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
             const fillBtn = document.createElement("button");
             fillBtn.className = "pd-btn pd-btn-primary";
             fillBtn.innerText = "Completar Huecos";
-            fillBtn.onclick = () => { void this.fillGaps(fillBtn).catch(err => console.error(err)); };
+            fillBtn.onclick = () => { void this.fillGaps(fillBtn, false).catch(err => console.error(err)); };
             actionsDiv.appendChild(fillBtn);
+
+            const festivoBtn = document.createElement("button");
+            festivoBtn.className = "pd-btn pd-btn-primary";
+            festivoBtn.innerText = "🎉 Festivo";
+            festivoBtn.style.backgroundColor = "#9B59B6";
+            festivoBtn.style.borderColor = "#9B59B6";
+            festivoBtn.onclick = () => { void this.fillGaps(festivoBtn, true).catch(err => console.error(err)); };
+            actionsDiv.appendChild(festivoBtn);
         }
 
         toolbar.appendChild(actionsDiv);
@@ -241,6 +252,9 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         this._timelineEl = document.createElement("div");
         this._timelineEl.className = this._isVertical ? "pd-timeline pd-vertical" : "pd-timeline pd-horizontal";
         
+        // Listener para detectar clicks en zonas vacías del timeline (Draw to create)
+        this._timelineEl.addEventListener("pointerdown", this.onPointerDown.bind(this));
+
         const axisDiv = document.createElement("div");
         axisDiv.className = this._isVertical ? "pd-axis pd-axis-vertical" : "pd-axis pd-axis-horizontal";
         
@@ -326,7 +340,11 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                     const nameLower = typeName.toLowerCase();
                     const descLower = (entry.msdyn_description || "").toLowerCase();
                     
-                    if (nameLower.includes("aprovisionamiento") || descLower.includes("aprovisionamiento")) {
+                    if (nameLower.includes("festivo") || descLower.includes("festivo")) {
+                        entryColor = "#9B59B6"; 
+                        iconStr = "🎉";
+                        // isVacaciones = false; <- Permitimos la edición
+                    } else if (nameLower.includes("aprovisionamiento") || descLower.includes("aprovisionamiento")) {
                         entryColor = "#E27200"; 
                         iconStr = "📦";
                     } else if (nameLower.includes("viaje")) {
@@ -346,8 +364,11 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                         iconStr = "🛠️";
                     }
 
-                    if (!typeColorMap.has(typeName)) {
+                    if (!typeColorMap.has(typeName) && !nameLower.includes("festivo") && !descLower.includes("festivo")) {
                         typeColorMap.set(typeName, entryColor);
+                    }
+                    if ((nameLower.includes("festivo") || descLower.includes("festivo")) && !typeColorMap.has("Festivo")) {
+                        typeColorMap.set("Festivo", "#9B59B6");
                     }
 
                     const entryDiv = document.createElement("div");
@@ -449,6 +470,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
 
                     const isReadOnlyEntry = this._isReadOnly || isVacaciones;
 
+                    // NOTA: entry.msdyn_type === 192355000 (Descanso) o Festivos (que los creamos con este tipo)
                     if (entry.msdyn_type === 192355000 && !isReadOnlyEntry) {
                         const deleteBtn = document.createElement("div");
                         deleteBtn.className = "pd-delete-btn";
@@ -490,9 +512,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
 
                         entryDiv.appendChild(resizerLeft);
                         entryDiv.appendChild(resizerRight);
-                        entryDiv.addEventListener("pointerdown", this.onPointerDown.bind(this));
                         
-                        // Nuevo evento Double Click para expandir huecos
                         entryDiv.addEventListener("dblclick", (ev) => {
                             ev.stopPropagation();
                             void this.expandEntryToGaps(entry, startDec, endDec, inicioDecimal, finDecimal);
@@ -502,7 +522,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                     } else {
                         entryDiv.style.cursor = "default"; 
                         if (isVacaciones) {
-                            entryDiv.title = "Las vacaciones no se pueden modificar desde este panel.";
+                            entryDiv.title = "Las vacaciones y ausencias no se pueden modificar desde este panel.";
                         }
                     }
 
@@ -996,7 +1016,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         this._container.appendChild(backdrop);
     }
 
-    private async fillGaps(btn: HTMLButtonElement): Promise<void> {
+    private async fillGaps(btn: HTMLButtonElement, isFestivo = false): Promise<void> {
         try {
             if (btn.disabled) return;
             btn.disabled = true;
@@ -1055,6 +1075,9 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                         "msdyn_type": 192355000, 
                         "msdyn_bookableresource@odata.bind": `/bookableresources(${recursoId})`
                     };
+                    if (isFestivo) {
+                        data["msdyn_description"] = "Festivo";
+                    }
                     await this._context.webAPI.createRecord("msdyn_timeentry", data);
                 }
             }
@@ -1065,7 +1088,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
             console.error("Error al completar huecos:", error);
             this.hideLoadingOverlay();
             btn.disabled = false;
-            btn.innerText = "Completar Huecos";
+            btn.innerText = isFestivo ? "🎉 Festivo" : "Completar Huecos";
             this.showErrorModal(error);
         }
     }
@@ -1197,49 +1220,111 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         if (target.classList.contains('pd-delete-btn') || target.classList.contains('pd-edit-btn')) return;
 
         const entryDiv = target.closest('.pd-entry') as HTMLElement;
-        if (!entryDiv) return;
-
-        this._isDragging = true;
-        this._dragTarget = entryDiv;
-        this._dragType = target.classList.contains('pd-resizer-left') ? 'left' : (target.classList.contains('pd-resizer-right') ? 'right' : 'move');
-
-        this._dragData.id = entryDiv.dataset.id || "";
-        this._dragData.originalStart = parseFloat(entryDiv.dataset.startDec || "0");
-        this._dragData.originalEnd = parseFloat(entryDiv.dataset.endDec || "0");
-        this._dragData.newStart = this._dragData.originalStart;
-        this._dragData.newEnd = this._dragData.originalEnd;
-        this._dragData.origStartDate = entryDiv.dataset.origStart || "";
-        this._dragData.origEndDate = entryDiv.dataset.origEnd || "";
-
-        let minBound = 0;
-        let maxBound = 24;
         
-        this._currentEntries.forEach(other => {
-            if (other.id === this._dragData.id) return;
-            if (other.endDec <= this._dragData.originalStart + 0.01) {
-                minBound = Math.max(minBound, other.endDec);
-            }
-            if (other.startDec >= this._dragData.originalEnd - 0.01) {
-                maxBound = Math.min(maxBound, other.startDec);
-            }
-        });
+        if (entryDiv && !entryDiv.classList.contains('pd-ghost-entry')) {
+            this._isDragging = true;
+            this._dragTarget = entryDiv;
+            this._dragType = target.classList.contains('pd-resizer-left') ? 'left' : (target.classList.contains('pd-resizer-right') ? 'right' : 'move');
 
-        this._dragData.minBound = minBound;
-        this._dragData.maxBound = maxBound;
+            this._dragData.id = entryDiv.dataset.id || "";
+            this._dragData.originalStart = parseFloat(entryDiv.dataset.startDec || "0");
+            this._dragData.originalEnd = parseFloat(entryDiv.dataset.endDec || "0");
+            this._dragData.newStart = this._dragData.originalStart;
+            this._dragData.newEnd = this._dragData.originalEnd;
+            this._dragData.origStartDate = entryDiv.dataset.origStart || "";
+            this._dragData.origEndDate = entryDiv.dataset.origEnd || "";
 
+            let minBound = 0;
+            let maxBound = 24;
+            
+            this._currentEntries.forEach(other => {
+                if (other.id === this._dragData.id) return;
+                if (other.endDec <= this._dragData.originalStart + 0.01) {
+                    minBound = Math.max(minBound, other.endDec);
+                }
+                if (other.startDec >= this._dragData.originalEnd - 0.01) {
+                    maxBound = Math.min(maxBound, other.startDec);
+                }
+            });
+
+            this._dragData.minBound = minBound;
+            this._dragData.maxBound = maxBound;
+
+            const rect = this._timelineEl.getBoundingClientRect();
+            const range = this._maxViewHour - this._minViewHour;
+            const pointerDec = this._isVertical ? 
+                this._minViewHour + ((e.clientY - rect.top) / rect.height) * range : 
+                this._minViewHour + ((e.clientX - rect.left) / rect.width) * range;
+
+            this._dragData.offsetDecimal = pointerDec - this._dragData.originalStart;
+
+            entryDiv.classList.add("pd-dragging");
+            this._liveTooltip.style.opacity = "1";
+            return;
+        }
+
+        if (target === this._timelineEl || target.classList.contains('pd-axis') || target.classList.contains('pd-jornada') || target.closest('.pd-jornada')) {
+            this.startDrawing(e);
+        }
+    }
+
+    private startDrawing(e: PointerEvent): void {
         const rect = this._timelineEl.getBoundingClientRect();
         const range = this._maxViewHour - this._minViewHour;
         const pointerDec = this._isVertical ? 
             this._minViewHour + ((e.clientY - rect.top) / rect.height) * range : 
             this._minViewHour + ((e.clientX - rect.left) / rect.width) * range;
 
-        this._dragData.offsetDecimal = pointerDec - this._dragData.originalStart;
+        const snappedStart = Math.round(pointerDec * 12) / 12;
 
-        entryDiv.classList.add("pd-dragging");
+        this._isDrawing = true;
+        this._drawStartDec = snappedStart;
+
+        this._drawGhost = document.createElement("div");
+        this._drawGhost.className = "pd-entry pd-ghost-entry";
+        this._drawGhost.style.backgroundColor = "rgba(0, 120, 212, 0.4)";
+        this._drawGhost.style.border = "2px dashed #0078d4";
+        
+        this._timelineEl.appendChild(this._drawGhost);
+
         this._liveTooltip.style.opacity = "1";
+        this.updateLiveTooltip(e.clientX, e.clientY, snappedStart, snappedStart);
     }
 
     private onPointerMove(e: PointerEvent): void {
+        if (this._isDrawing && this._drawGhost && this._timelineEl) {
+            const rect = this._timelineEl.getBoundingClientRect();
+            const range = this._maxViewHour - this._minViewHour;
+            const pointerDec = this._isVertical ? 
+                this._minViewHour + ((e.clientY - rect.top) / rect.height) * range : 
+                this._minViewHour + ((e.clientX - rect.left) / rect.width) * range;
+
+            const snappedEnd = Math.round(pointerDec * 12) / 12;
+            
+            let start = Math.min(this._drawStartDec, snappedEnd);
+            let end = Math.max(this._drawStartDec, snappedEnd);
+
+            start = Math.max(this._minViewHour, start);
+            end = Math.min(this._maxViewHour, end);
+
+            const startPercent = ((start - this._minViewHour) / range) * 100;
+            const sizePercent = ((end - start) / range) * 100;
+
+            if (this._isVertical) {
+                this._drawGhost.style.top = `${startPercent}%`;
+                this._drawGhost.style.height = `${sizePercent}%`;
+                this._drawGhost.style.width = `100%`;
+            } else {
+                this._drawGhost.style.left = `${startPercent}%`;
+                this._drawGhost.style.width = `${sizePercent}%`;
+                this._drawGhost.style.top = `15%`;
+                this._drawGhost.style.height = `70%`;
+            }
+
+            this.updateLiveTooltip(e.clientX, e.clientY, start, end);
+            return;
+        }
+
         if (!this._isDragging || !this._dragTarget || !this._timelineEl) return;
 
         const rect = this._timelineEl.getBoundingClientRect();
@@ -1294,6 +1379,61 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
     }
 
     private async onPointerUp(e: PointerEvent): Promise<void> {
+        if (this._isDrawing) {
+            this._isDrawing = false;
+            this._liveTooltip.style.opacity = "0";
+            if (this._drawGhost && this._drawGhost.parentNode) {
+                this._drawGhost.parentNode.removeChild(this._drawGhost);
+            }
+
+            const rect = this._timelineEl.getBoundingClientRect();
+            const range = this._maxViewHour - this._minViewHour;
+            const pointerDec = this._isVertical ? 
+                this._minViewHour + ((e.clientY - rect.top) / rect.height) * range : 
+                this._minViewHour + ((e.clientX - rect.left) / rect.width) * range;
+
+            const snappedEnd = Math.round(pointerDec * 12) / 12;
+            
+            const start = Math.min(this._drawStartDec, snappedEnd);
+            const end = Math.max(this._drawStartDec, snappedEnd);
+
+            const durationMins = Math.round((end - start) * 60);
+
+            if (durationMins >= 5) {
+                const params = this._context.parameters;
+                const fechaRaw = params.sec_fecha?.raw;
+                const recursoRaw = params.sec_recursoid?.raw;
+                
+                if (fechaRaw && recursoRaw && recursoRaw.length > 0) {
+                    const recursoId = recursoRaw[0].id.replace(/[{}]/g, "").toLowerCase();
+                    const baseDateStr = (fechaRaw as Date).toISOString();
+                    
+                    const payload = {
+                        "msdyn_start": this.applyTimeToDateStr(baseDateStr, start),
+                        "msdyn_end": this.applyTimeToDateStr(baseDateStr, end),
+                        "msdyn_duration": durationMins,
+                        "msdyn_type": 192355000,
+                        "msdyn_description": "Trabajo (Manual)",
+                        "msdyn_bookableresource@odata.bind": `/bookableresources(${recursoId})`
+                    };
+
+                    this.showLoadingOverlay();
+                    this._context.webAPI.createRecord("msdyn_timeentry", payload)
+                        .then(() => {
+                            void this.renderTimeline();
+                            return null;
+                        })
+                        .catch((err: unknown) => {
+                            this.hideLoadingOverlay();
+                            this.showErrorModal(err);
+                        });
+                }
+            }
+            
+            this._drawGhost = null;
+            return;
+        }
+
         if (!this._isDragging) return;
         this._isDragging = false;
         this._liveTooltip.style.opacity = "0";
@@ -1326,8 +1466,10 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         this._dragTarget = null;
     }
 
-    private updateLiveTooltip(x: number, y: number): void {
-        this._liveTooltip.innerText = `${this.formatDecimalTime(this._dragData.newStart)} - ${this.formatDecimalTime(this._dragData.newEnd)}`;
+    private updateLiveTooltip(x: number, y: number, customStart?: number, customEnd?: number): void {
+        const start = customStart !== undefined ? customStart : this._dragData.newStart;
+        const end = customEnd !== undefined ? customEnd : this._dragData.newEnd;
+        this._liveTooltip.innerText = `${this.formatDecimalTime(start)} - ${this.formatDecimalTime(end)}`;
         this._liveTooltip.style.left = `${x}px`;
         this._liveTooltip.style.top = `${y}px`;
     }
