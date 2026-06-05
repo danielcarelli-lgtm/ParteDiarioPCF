@@ -12,66 +12,63 @@ Un componente de interfaz de usuario personalizado (PCF - Power Apps Component F
 - **Validación Visual:** Detección automática de horas imputadas fuera de la jornada laboral y alertas visuales de solapamiento de horas (bloques cruzados).
 - **Cálculo en Tiempo Real:** Muestra el total de horas imputadas frente a las horas objetivo de la jornada, indicando el tiempo faltante o extra.
 
----
 # Manual de Uso - Panel Interactivo de Field Service ⏱️
 
-Bienvenido al nuevo panel interactivo para la gestión del Parte Diario. Este componente sustituye la clásica cuadrícula de registros por una línea de tiempo visual, diseñada para agilizar y simplificar la imputación de horas de trabajo, descansos y aprovisionamientos.
-
-A continuación, se detalla el funcionamiento de cada elemento de la interfaz.
+Bienvenido al nuevo panel interactivo para la gestión del Parte Diario. Este componente sustituye la clásica cuadrícula de registros por una línea de tiempo visual, diseñada para agilizar y simplificar la imputación de horas de trabajo, descansos, aprovisionamientos y festivos.
 
 ---
 
 ## 1. Panel de Métricas (Totales)
-Ubicado en la parte superior derecha de la pantalla, este panel te muestra el balance de tu día en tiempo real:
-- **⏳ Imputado:** Es la suma total de horas y minutos que ya tienes registrados en tu parte de hoy.
-- **Jornada:** Indica las horas totales que dura tu turno o jornada laboral teórica de ese día.
-- **Faltan / Extra:** El sistema calcula automáticamente la diferencia. Se mostrará en **rojo** si aún te faltan horas para completar la jornada, o en **verde** si has completado la jornada o tienes horas extras.
+Ubicado en la parte superior derecha, te muestra el balance de tu día en tiempo real:
+- **⏳ Imputado:** Suma total de horas y minutos registrados.
+- **Jornada:** Horas totales de tu turno o jornada laboral teórica.
+- **Faltan / Extra:** Indica en **rojo** si faltan horas por completar o en **verde** si has superado la jornada o la has cumplido exactamente.
 
 ---
 
 ## 2. Botones de Acción (Barra Superior)
-En la parte superior encontrarás una barra de herramientas para realizar acciones rápidas:
-
-- **↔️ / ↕️ Vista:** Cambia la interfaz entre un formato de línea de tiempo vertical u horizontal, según lo que te resulte más cómodo.
-- **🔍 Zoom:** Permite cambiar la escala de visualización. Puedes ver las 24 horas del día completas o hacer "zoom" para encuadrar y centrarte únicamente en las horas de tu jornada laboral.
-- **🔄 Refrescar:** Recarga los datos para asegurar que estás viendo la última información guardada.
-- **🍔 Crear Almuerzo:** Abre una ventana rápida para registrar tu tiempo de comida. Por defecto sugiere las 14:00h y una duración de 1 hora (modificable).
-- **📦 Crear Aprovisionamiento:** Abre una ventana para registrar tareas de almacén, carga o descarga. Sugiere por defecto las 08:00h y 30 minutos de duración.
-- **Completar Huecos:** Examina tu línea de tiempo y crea automáticamente bloques de horas de trabajo en todos los espacios vacíos dentro de tu jornada. Úsalo para cuadrar tu día al 100% con un solo clic.
-- **🚀 Enviar Parte:** Una vez que tus horas cuadran y el parte está listo, pulsa este botón para enviarlo. 
-  > **⚠️ Atención:** Al enviar el parte, el estado cambiará a "Enviado" y el panel se bloqueará por completo (modo lectura), por lo que no podrás hacer más modificaciones.
+- **↔️ / ↕️ Vista:** Cambia la interfaz entre formato vertical u horizontal.
+- **🔍 Zoom:** Cambia la escala para ver 24h o solo tu jornada laboral.
+- **🔄 Refrescar:** Sincroniza los datos con el servidor.
+- **🍔 Crear Almuerzo:** Registra automáticamente un tiempo de comida (por defecto 1 hora).
+- **📦 Crear Aprovisionamiento:** Registra tareas de carga/descarga (por defecto 30 min).
+- **Completar Huecos:** Rellena automáticamente los espacios vacíos de tu jornada con bloques de trabajo.
+- **🎉 Festivo:** Rellena los espacios vacíos de tu jornada marcándolos como "Festivo".
+- **🚀 Enviar Parte:** Bloquea el parte para su revisión (estado "Enviado"). **Nota:** Una vez pulsado, el registro se vuelve de solo lectura.
 
 ---
 
 ## 3. Interacción con los Bloques de Tiempo (Slots)
-Cada franja de color en tu línea de tiempo representa un bloque de horas. Mientras el parte esté en estado "Borrador", puedes manipularlos fácilmente con el ratón:
+Puedes manipular los bloques de forma muy intuitiva:
 
-- **Mover (Drag & Drop):** Haz clic y mantén pulsado en el centro de un bloque para arrastrarlo a una nueva hora del día.
-- **Redimensionar:** Pasa el ratón por el borde superior o inferior de un bloque. Haz clic y arrastra para acortar o alargar la duración (el ajuste va de 5 en 5 minutos).
-- **Ajuste Inteligente (Doble Clic):** Si haces doble clic sobre un bloque existente, este se estirará automáticamente hacia arriba y hacia abajo para ocupar todo el tiempo libre disponible, deteniéndose justo donde empieza otro bloque o en el límite de tu jornada.
-- **✏️ Editar:** Haz clic en el pequeño icono de lápiz dentro del bloque. Se abrirá una ventana para ajustar manualmente la hora exacta, la duración y la descripción de esa tarea.
-- **❌ Eliminar:** Haz clic en la "X" del bloque para borrarlo permanentemente (el sistema te pedirá confirmación).
+- **Creación por Arrastre (Draw to Create):** Haz clic en cualquier espacio vacío de la línea de tiempo y arrastra el ratón. Verás un bloque "fantasma" que se estira; al soltar, se creará automáticamente una nueva entrada de tiempo con esa duración exacta.
+- **Mover (Drag & Drop):** Haz clic y arrastra el centro de cualquier bloque para cambiar su hora.
+- **Redimensionar:** Haz clic y arrastra los bordes del bloque para ajustar su duración de 5 en 5 minutos.
+- **Ajuste Inteligente (Doble Clic):** Haz doble clic sobre un bloque existente para que se estire automáticamente hasta tocar el bloque anterior o posterior, o los límites de tu jornada.
+- **✏️ Editar:** Pulsa el icono del lápiz para abrir el modal y ajustar manualmente hora, duración y descripción.
+- **❌ Eliminar:** Pulsa la "X" para borrar la entrada (siempre que el parte esté en borrador).
 
 ---
 
 ## 4. Leyenda Visual y Colores
-El panel utiliza un código de colores e iconos para que identifiques de un vistazo en qué has invertido tu tiempo:
+El panel identifica rápidamente el tipo de tarea realizada:
 
-- 🛠️ **Trabajo (Azul):** Horas estándar de trabajo u órdenes de trabajo productivas.
-- 📦 **Aprovisionamiento (Naranja):** Tareas relacionadas con la gestión de almacén o carga de material.
-- 🚗 **Viaje (Verde):** Tiempos de desplazamiento entre ubicaciones.
-- 🍔 / ☕ **Descanso o Almuerzo (Rojo):** Tiempos de parada.
-- 🌴 **Vacaciones o Ausencias (Granate):** Días libres o permisos. 
-  > *Nota: Estos bloques están protegidos por el sistema y son de solo lectura. No se pueden modificar ni mover desde este panel.*
-- **Extra (Azul Oscuro):** Horas catalogadas oficialmente como extraordinarias.
+- 🛠️ **Trabajo (Azul):** Horas de trabajo productivo.
+- 📦 **Aprovisionamiento (Naranja):** Gestión de almacén.
+- 🚗 **Viaje (Verde):** Tiempos de desplazamiento.
+- 🍔 / ☕ **Descanso (Rojo):** Paradas.
+- 🌴 **Vacaciones (Granate):** Días libres (Solo lectura).
+- 🎉 **Festivo (Morado):** Días festivos registrados.
+- **Extra (Azul Oscuro):** Horas extraordinarias.
+
+> **Nota sobre Festivos y Descansos:** A diferencia de las vacaciones, los bloques de **Festivos** pueden editarse, redimensionarse o eliminarse mientras el parte esté en estado "Borrador".
 
 ---
 
-## 5. Avisos Visuales Especiales
-El panel te avisa de posibles errores en la imputación mediante tramas especiales en los bloques:
+## 5. Avisos Visuales
+- **⚠️ Solapamiento (Fondo rojo a rayas):** Ocurre si dos bloques se pisan. Debes corregirlos para que no coincidan.
+- **Fuera de Horario (Fondo transparente a rayas):** Indica que el bloque está registrado fuera de tu horario oficial (antes del inicio o después del fin de jornada).
 
-- **⚠️ Solapamiento (Fondo rojo a rayas):** Si dos bloques de tiempo se pisan en la misma hora, se pintarán con un fondo rayado rojo y un símbolo de advertencia. Debes corregir las horas para que no coincidan.
-- **Fuera de Horario (Fondo transparente a rayas):** Si registras un bloque de tiempo antes de tu hora de inicio oficial o después de tu hora de fin, aparecerá con un sombreado rayado para indicarte que está fuera del horario estándar establecido.
 ---
 ## 🛠️ Instalación y Despliegue (Perfil Técnico)
 
