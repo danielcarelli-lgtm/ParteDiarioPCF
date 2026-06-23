@@ -54,7 +54,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
     private _container: HTMLDivElement;
     private _context: ComponentFramework.Context<IInputs>;
     private _notifyOutputChanged: () => void;
-    private _version = "v1.0.61"; // Versión incrementada
+    private _version = "v1.0.62"; // Versión incrementada
 
     private _timelineEl: HTMLDivElement;
     private _liveTooltip: HTMLDivElement;
@@ -252,7 +252,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         this._timelineEl = document.createElement("div");
         this._timelineEl.className = this._isVertical ? "pd-timeline pd-vertical" : "pd-timeline pd-horizontal";
         
-        // Listener para detectar clicks en zonas vacías del timeline (Draw to create)
         this._timelineEl.addEventListener("pointerdown", this.onPointerDown.bind(this));
 
         const axisDiv = document.createElement("div");
@@ -343,7 +342,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                     if (nameLower.includes("festivo") || descLower.includes("festivo")) {
                         entryColor = "#9B59B6"; 
                         iconStr = "🎉";
-                        // isVacaciones = false; <- Permitimos la edición
                     } else if (nameLower.includes("aprovisionamiento") || descLower.includes("aprovisionamiento")) {
                         entryColor = "#E27200"; 
                         iconStr = "📦";
@@ -470,7 +468,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
 
                     const isReadOnlyEntry = this._isReadOnly || isVacaciones;
 
-                    // NOTA: entry.msdyn_type === 192355000 (Descanso) o Festivos (que los creamos con este tipo)
                     if (entry.msdyn_type === 192355000 && !isReadOnlyEntry) {
                         const deleteBtn = document.createElement("div");
                         deleteBtn.className = "pd-delete-btn";
@@ -728,11 +725,11 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                 
                 if (fechaRaw && recursoRaw && recursoRaw.length > 0) {
                     const recursoId = recursoRaw[0].id.replace(/[{}]/g, "").toLowerCase();
-                    const baseDateStr = (fechaRaw as Date).toISOString();
+                    const baseDate = fechaRaw as Date;
                     
                     const payload = {
-                        "msdyn_start": this.applyTimeToDateStr(baseDateStr, hDec),
-                        "msdyn_end": this.applyTimeToDateStr(baseDateStr, endDec),
+                        "msdyn_start": this.applyTimeToDateStr(baseDate, hDec),
+                        "msdyn_end": this.applyTimeToDateStr(baseDate, endDec),
                         "msdyn_duration": durVal,
                         "msdyn_type": 192355000,
                         "msdyn_description": "Aprovisionamiento",
@@ -974,11 +971,11 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                 
                 if (fechaRaw && recursoRaw && recursoRaw.length > 0) {
                     const recursoId = recursoRaw[0].id.replace(/[{}]/g, "").toLowerCase();
-                    const baseDateStr = (fechaRaw as Date).toISOString();
+                    const baseDate = fechaRaw as Date;
                     
                     const payload = {
-                        "msdyn_start": this.applyTimeToDateStr(baseDateStr, hDec),
-                        "msdyn_end": this.applyTimeToDateStr(baseDateStr, endDec),
+                        "msdyn_start": this.applyTimeToDateStr(baseDate, hDec),
+                        "msdyn_end": this.applyTimeToDateStr(baseDate, endDec),
                         "msdyn_duration": durVal,
                         "msdyn_type": 192355000,
                         "msdyn_description": "Almuerzo",
@@ -1064,13 +1061,13 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
             }
 
             if (gaps.length > 0) {
-                const baseDate = new Date(fechaRaw as Date);
+                const baseDate = fechaRaw as Date;
                 for (const gap of gaps) {
                     const durationMinutes = Math.round((gap.e - gap.s) * 60);
                     
                     const data: ComponentFramework.WebApi.Entity = {
-                        "msdyn_start": this.applyTimeToDateStr(baseDate.toISOString(), gap.s),
-                        "msdyn_end": this.applyTimeToDateStr(baseDate.toISOString(), gap.e),
+                        "msdyn_start": this.applyTimeToDateStr(baseDate, gap.s),
+                        "msdyn_end": this.applyTimeToDateStr(baseDate, gap.e),
                         "msdyn_duration": durationMinutes,
                         "msdyn_type": 192355000, 
                         "msdyn_bookableresource@odata.bind": `/bookableresources(${recursoId})`
@@ -1406,11 +1403,11 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                 
                 if (fechaRaw && recursoRaw && recursoRaw.length > 0) {
                     const recursoId = recursoRaw[0].id.replace(/[{}]/g, "").toLowerCase();
-                    const baseDateStr = (fechaRaw as Date).toISOString();
+                    const baseDate = fechaRaw as Date;
                     
                     const payload = {
-                        "msdyn_start": this.applyTimeToDateStr(baseDateStr, start),
-                        "msdyn_end": this.applyTimeToDateStr(baseDateStr, end),
+                        "msdyn_start": this.applyTimeToDateStr(baseDate, start),
+                        "msdyn_end": this.applyTimeToDateStr(baseDate, end),
                         "msdyn_duration": durationMins,
                         "msdyn_type": 192355000,
                         "msdyn_description": "Trabajo (Manual)",
@@ -1484,11 +1481,13 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         return d.getUTCHours() + (d.getUTCMinutes() / 60);
     }
 
-    private applyTimeToDateStr(origIsoString: string, decimalHours: number): string {
-        const d = new Date(origIsoString);
+    private applyTimeToDateStr(dateRef: string | Date, decimalHours: number): string {
+        const ref = new Date(dateRef);
         const h = Math.floor(decimalHours);
         const m = Math.round((decimalHours - h) * 60);
-        d.setHours(h, m, 0, 0);
+        
+        // Creamos una nueva fecha respetando exactamente el día local original
+        const d = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate(), h, m, 0, 0);
         return d.toISOString();
     }
 
@@ -1504,9 +1503,16 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
 
     private async fetchTimeEntries(context: ComponentFramework.Context<IInputs>, fecha: Date, recursoId: string): Promise<ITimeEntry[]> {
         const y = fecha.getFullYear();
-        const m = String(fecha.getMonth() + 1).padStart(2, '0');
-        const d = String(fecha.getDate()).padStart(2, '0');
-        const filter = `_msdyn_bookableresource_value eq ${recursoId} and msdyn_start ge ${y}-${m}-${d}T00:00:00Z and msdyn_start le ${y}-${m}-${d}T23:59:59Z`;
+        const m = fecha.getMonth();
+        const d = fecha.getDate();
+        
+        // Obtenemos los límites del día en formato local, luego los pasamos a ISO (UTC) para asegurar
+        // que cualquier entrada del día en nuestra zona horaria sea recuperada, sin importar si 
+        // cae en el día UTC anterior o posterior debido al Offset (+02:00 etc).
+        const startOfDay = new Date(y, m, d, 0, 0, 0);
+        const endOfDay = new Date(y, m, d, 23, 59, 59);
+
+        const filter = `_msdyn_bookableresource_value eq ${recursoId} and msdyn_start ge ${startOfDay.toISOString()} and msdyn_start le ${endOfDay.toISOString()}`;
         const query = `?$filter=${filter}&$select=msdyn_timeentryid,msdyn_start,msdyn_end,msdyn_type,_msdyn_workorder_value,msdyn_description`;
         const res = await context.webAPI.retrieveMultipleRecords("msdyn_timeentry", query);
         return res.entities as ITimeEntry[];
