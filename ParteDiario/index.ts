@@ -55,7 +55,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
     private _container: HTMLDivElement;
     private _context: ComponentFramework.Context<IInputs>;
     private _notifyOutputChanged: () => void;
-    private _version = "v1.0.63"; // Versión incrementada
+    private _version = "v1.0.65"; // Versión incrementada
 
     private _timelineEl: HTMLDivElement;
     private _liveTooltip: HTMLDivElement;
@@ -370,6 +370,12 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                         typeColorMap.set("Festivo", "#9B59B6");
                     }
 
+                    // Condiciones de edición y eliminación
+                    const isViaje = nameLower.includes("viaje");
+                    const hasOT = !!entry._msdyn_workorder_value;
+                    const canModify = !this._isReadOnly && !isVacaciones;
+                    const canDelete = !this._isReadOnly && !isVacaciones && !isViaje && !hasOT;
+
                     const entryDiv = document.createElement("div");
                     entryDiv.className = isOutOfHours ? "pd-entry pd-out-of-hours" : "pd-entry";
 
@@ -395,6 +401,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                     entryDiv.dataset.endDec = endDec.toString();
                     entryDiv.dataset.origStart = entry.msdyn_start;
                     entryDiv.dataset.origEnd = entry.msdyn_end;
+                    entryDiv.dataset.canModify = canModify ? "true" : "false";
 
                     const otName = entry["_msdyn_workorder_value@OData.Community.Display.V1.FormattedValue"] || "N/A";
                     const desc = entry.msdyn_description;
@@ -467,9 +474,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                         entryDiv.appendChild(badge);
                     }
 
-                    const isReadOnlyEntry = this._isReadOnly || isVacaciones;
-
-                    if (entry.msdyn_type === this.TYPE_TRABAJO && !isReadOnlyEntry) {
+                    if (canDelete) {
                         const deleteBtn = document.createElement("div");
                         deleteBtn.className = "pd-delete-btn";
                         deleteBtn.innerHTML = "&times;";
@@ -492,7 +497,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                         entryDiv.appendChild(deleteBtn);
                     }
 
-                    if (!isReadOnlyEntry) {
+                    if (canModify) {
                         const editBtn = document.createElement("div");
                         editBtn.className = "pd-edit-btn";
                         editBtn.innerHTML = "✏️";
@@ -520,7 +525,9 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                     } else {
                         entryDiv.style.cursor = "default"; 
                         if (isVacaciones) {
-                            entryDiv.title = "Las vacaciones y ausencias no se pueden modificar desde este panel.";
+                            entryDiv.title = "Las vacaciones y ausencias no se pueden modificar ni eliminar desde este panel.";
+                        } else if (!canDelete) {
+                            entryDiv.title = `${timeText}\n${detailText}\n(No se puede eliminar)`;
                         }
                     }
 
@@ -1108,13 +1115,13 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                         "msdyn_start": this.applyTimeToDateStr(baseDate, gap.s),
                         "msdyn_end": this.applyTimeToDateStr(baseDate, gap.e),
                         "msdyn_duration": durationMinutes,
-                        "msdyn_type": isFestivo ? 192355000 : this.TYPE_TRABAJO,
+                        "msdyn_type": 192355000, 
                         "msdyn_bookableresource@odata.bind": `/bookableresources(${recursoId})`
                     };
                     if (isFestivo) {
                         data["msdyn_description"] = "Festivo";
                     } else {
-                        data["msdyn_description"] = "Trabajo (Autocompletado)";
+                        data["msdyn_description"] = "Sin asignación";
                     }
                     await this._context.webAPI.createRecord("msdyn_timeentry", data);
                 }
@@ -1260,6 +1267,9 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         const entryDiv = target.closest('.pd-entry') as HTMLElement;
         
         if (entryDiv && !entryDiv.classList.contains('pd-ghost-entry')) {
+            // Impedimos arrastrar si la entrada no permite modificación (vacaciones)
+            if (entryDiv.dataset.canModify === "false") return;
+
             this._isDragging = true;
             this._dragTarget = entryDiv;
             this._dragType = target.classList.contains('pd-resizer-left') ? 'left' : (target.classList.contains('pd-resizer-right') ? 'right' : 'move');
