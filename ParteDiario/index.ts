@@ -49,12 +49,13 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
     private readonly STATUS_BORRADOR = 1;  
     private readonly STATUS_ENVIADO = 909540001;   
     private readonly STATUS_APROBADO = 909540002;  
+    private readonly TYPE_TRABAJO = 192350000;
     // =========================================================================
 
     private _container: HTMLDivElement;
     private _context: ComponentFramework.Context<IInputs>;
     private _notifyOutputChanged: () => void;
-    private _version = "v1.0.62"; // Versión incrementada
+    private _version = "v1.0.63"; // Versión incrementada
 
     private _timelineEl: HTMLDivElement;
     private _liveTooltip: HTMLDivElement;
@@ -217,11 +218,11 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
             lunchBtn.onclick = () => this.showLunchModal();
             actionsDiv.appendChild(lunchBtn);
 
-            const aprovisionamientoBtn = document.createElement("button");
-            aprovisionamientoBtn.className = "pd-btn pd-btn-primary";
-            aprovisionamientoBtn.innerText = "📦 Crear Aprovisionamiento";
-            aprovisionamientoBtn.onclick = () => this.showAprovisionamientoModal();
-            actionsDiv.appendChild(aprovisionamientoBtn);
+            const crearEntradaBtn = document.createElement("button");
+            crearEntradaBtn.className = "pd-btn pd-btn-primary";
+            crearEntradaBtn.innerText = "➕ Crear entrada";
+            crearEntradaBtn.onclick = () => this.showCrearEntradaModal();
+            actionsDiv.appendChild(crearEntradaBtn);
 
             const fillBtn = document.createElement("button");
             fillBtn.className = "pd-btn pd-btn-primary";
@@ -468,7 +469,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
 
                     const isReadOnlyEntry = this._isReadOnly || isVacaciones;
 
-                    if (entry.msdyn_type === 192355000 && !isReadOnlyEntry) {
+                    if (entry.msdyn_type === this.TYPE_TRABAJO && !isReadOnlyEntry) {
                         const deleteBtn = document.createElement("div");
                         deleteBtn.className = "pd-delete-btn";
                         deleteBtn.innerHTML = "&times;";
@@ -654,7 +655,15 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         }
     }
 
-    private showAprovisionamientoModal(): void {
+    private showCrearEntradaModal(): void {
+        const categories = [
+            { label: "Control de stock", desc: "Inventarios de almacenes" },
+            { label: "Visita sin OT", desc: "Replanteos sin servicio abierto" },
+            { label: "Acopio Material", desc: "Compras en proveedores locales" },
+            { label: "Formación", desc: "Formación" },
+            { label: "Otros motivos laborales", desc: "Otros motivos laborales" }
+        ];
+
         const backdrop = document.createElement("div");
         backdrop.className = "pd-modal-backdrop";
 
@@ -662,7 +671,44 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         modal.className = "pd-modal";
 
         const title = document.createElement("h3");
-        title.innerText = "📦 Registrar Aprovisionamiento";
+        title.innerText = "📦 Crear entrada";
+        modal.appendChild(title);
+
+        categories.forEach(cat => {
+            const btn = document.createElement("button");
+            btn.className = "pd-btn pd-btn-secondary";
+            btn.style.width = "100%";
+            btn.style.marginBottom = "5px";
+            btn.innerText = cat.label;
+            btn.onclick = () => {
+                if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+                this.showDetailsModal(cat.label, cat.desc);
+            };
+            modal.appendChild(btn);
+        });
+
+        const cancelBtn = document.createElement("button");
+        cancelBtn.className = "pd-btn";
+        cancelBtn.innerText = "Cancelar";
+        cancelBtn.style.marginTop = "10px";
+        cancelBtn.onclick = () => {
+            if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+        };
+        modal.appendChild(cancelBtn);
+
+        backdrop.appendChild(modal);
+        this._container.appendChild(backdrop);
+    }
+
+    private showDetailsModal(categoryLabel: string, description: string): void {
+        const backdrop = document.createElement("div");
+        backdrop.className = "pd-modal-backdrop";
+
+        const modal = document.createElement("div");
+        modal.className = "pd-modal";
+
+        const title = document.createElement("h3");
+        title.innerText = categoryLabel;
         modal.appendChild(title);
 
         const lblTime = document.createElement("label");
@@ -681,12 +727,12 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
 
         const selectDur = document.createElement("select");
         selectDur.className = "pd-input";
-        const options = [ {v:15, l:"15 minutos"}, {v:30, l:"30 minutos"}, {v:45, l:"45 minutos"}, {v:60, l:"1 hora"}, {v:90, l:"1.5 horas"} ];
+        const options = [ {v:15, l:"15 minutos"}, {v:30, l:"30 minutos"}, {v:45, l:"45 minutos"}, {v:60, l:"1 hora"}, {v:90, l:"1.5 horas"}, {v:120, l:"2 horas"} ];
         options.forEach(o => {
             const opt = document.createElement("option");
             opt.value = o.v.toString();
             opt.innerText = o.l;
-            if(o.v === 30) opt.selected = true;
+            if(o.v === 60) opt.selected = true;
             selectDur.appendChild(opt);
         });
         modal.appendChild(selectDur);
@@ -705,13 +751,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
             const timeVal = inputTime.value; 
             const durVal = parseInt(selectDur.value, 10);
             
-            if(!timeVal) {
-                alert("Introduce una hora válida");
-                saveBtn.disabled = false;
-                saveBtn.innerText = "Guardar";
-                return;
-            }
-
             const match = timeVal.match(/(\d{1,2}):(\d{2})/);
             if(match) {
                 const h = parseInt(match[1], 10);
@@ -731,8 +770,8 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                         "msdyn_start": this.applyTimeToDateStr(baseDate, hDec),
                         "msdyn_end": this.applyTimeToDateStr(baseDate, endDec),
                         "msdyn_duration": durVal,
-                        "msdyn_type": 192355000,
-                        "msdyn_description": "Aprovisionamiento",
+                        "msdyn_type": this.TYPE_TRABAJO,
+                        "msdyn_description": description,
                         "msdyn_bookableresource@odata.bind": `/bookableresources(${recursoId})`
                     };
 
@@ -1069,11 +1108,13 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                         "msdyn_start": this.applyTimeToDateStr(baseDate, gap.s),
                         "msdyn_end": this.applyTimeToDateStr(baseDate, gap.e),
                         "msdyn_duration": durationMinutes,
-                        "msdyn_type": 192355000, 
+                        "msdyn_type": isFestivo ? 192355000 : this.TYPE_TRABAJO,
                         "msdyn_bookableresource@odata.bind": `/bookableresources(${recursoId})`
                     };
                     if (isFestivo) {
                         data["msdyn_description"] = "Festivo";
+                    } else {
+                        data["msdyn_description"] = "Trabajo (Autocompletado)";
                     }
                     await this._context.webAPI.createRecord("msdyn_timeentry", data);
                 }
@@ -1409,7 +1450,7 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
                         "msdyn_start": this.applyTimeToDateStr(baseDate, start),
                         "msdyn_end": this.applyTimeToDateStr(baseDate, end),
                         "msdyn_duration": durationMins,
-                        "msdyn_type": 192355000,
+                        "msdyn_type": this.TYPE_TRABAJO,
                         "msdyn_description": "Trabajo (Manual)",
                         "msdyn_bookableresource@odata.bind": `/bookableresources(${recursoId})`
                     };
@@ -1486,7 +1527,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         const h = Math.floor(decimalHours);
         const m = Math.round((decimalHours - h) * 60);
         
-        // Creamos una nueva fecha respetando exactamente el día local original
         const d = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate(), h, m, 0, 0);
         return d.toISOString();
     }
@@ -1506,9 +1546,6 @@ export class ParteDiario implements ComponentFramework.StandardControl<IInputs, 
         const m = fecha.getMonth();
         const d = fecha.getDate();
         
-        // Obtenemos los límites del día en formato local, luego los pasamos a ISO (UTC) para asegurar
-        // que cualquier entrada del día en nuestra zona horaria sea recuperada, sin importar si 
-        // cae en el día UTC anterior o posterior debido al Offset (+02:00 etc).
         const startOfDay = new Date(y, m, d, 0, 0, 0);
         const endOfDay = new Date(y, m, d, 23, 59, 59);
 
